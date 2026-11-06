@@ -38,6 +38,9 @@ image selection is `/etc/ais2api-server/image.env`, and the existing protected
 `aistudio-api.service` unit controls the new server. Its traffic start gate and
 the host traffic timer remain enabled. Release packages cannot overwrite the
 root updater, service unit, Compose policy or mutable data.
+Before changing the existing stack's repository trust, retire any legacy updater
+entry points referenced by retained SSM document versions. Historical versions
+must not provide a path back to the old product or repository.
 
 Load the verified archive with `docker load`, then set `SERVER_IMAGE` to the exact
 tested tag/digest, `SERVER_DATA` to a dedicated persistent directory, and use
