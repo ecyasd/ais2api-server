@@ -104,6 +104,7 @@ func (s *server) handlePairingAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input.RenewalToken = rand.Text()
+	input.AuthUserProvided = true
 	account, err := s.config.Admin.ImportAccountState(r.Context(), input)
 	if err != nil {
 		writeAdminUpstreamError(w, err)

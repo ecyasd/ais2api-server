@@ -5,6 +5,19 @@ export { default as serverMessages } from '../../../internal/i18n/messages/fr.js
 
 // messages 是界面文案与管理接口错误码文案
 export const messages: Record<TranslationKey, string> = {
+  'accounts.remoteChromeHelp':
+    'Détecter les comptes Chrome sur votre ordinateur, les sélectionner et les envoyer ici',
+  'accounts.remoteLoginHelp':
+    'Se connecter à Google sur votre ordinateur et envoyer la session ici',
+  'accounts.remoteBrowserHelp':
+    'Lire les cookies sur le PC source via l’adresse de débogage du navigateur',
+  'accounts.remoteBrowser': 'Navigateur du PC source',
+  'accounts.remoteBrowserAddress': 'Adresse de débogage du navigateur source',
+  'accounts.remoteAuthUser': 'Numéro de session Google (0–9)',
+  'accounts.remoteBrowserAddressInvalid':
+    'Saisissez une adresse locale comme http://127.0.0.1:9222 et un numéro de session entre 0 et 9',
+  'accounts.cookieImportHint':
+    'Collez un en-tête Cookie, un JSON Cookie-Editor, cookies.txt ou un état complet, ou sélectionnez plusieurs fichiers. Les comptes sont détectés et importés en lot après sélection.',
   'auth.username': 'Nom d’utilisateur',
   'auth.password': 'Mot de passe',
   'auth.login': 'Se connecter',

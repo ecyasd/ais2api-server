@@ -5,6 +5,16 @@ export { default as serverMessages } from '../../../internal/i18n/messages/ko.js
 
 // messages 是界面文案与管理接口错误码文案
 export const messages: Record<TranslationKey, string> = {
+  'accounts.remoteChromeHelp': '내 컴퓨터의 Chrome 계정을 찾아 선택하고 서버로 전송',
+  'accounts.remoteLoginHelp': '내 컴퓨터에서 Google에 로그인한 뒤 로그인 상태 전송',
+  'accounts.remoteBrowserHelp': '원래 컴퓨터에서 브라우저의 디버깅 주소로 Cookie를 읽습니다',
+  'accounts.remoteBrowser': '원래 컴퓨터의 브라우저',
+  'accounts.remoteBrowserAddress': '브라우저 디버깅 주소',
+  'accounts.remoteAuthUser': 'Google 세션 번호 (0–9)',
+  'accounts.remoteBrowserAddressInvalid':
+    '로컬 주소(예: http://127.0.0.1:9222)와 0–9의 세션 번호를 입력하세요',
+  'accounts.cookieImportHint':
+    'Cookie 헤더, Cookie-Editor JSON, cookies.txt, 전체 상태 및 여러 파일을 지원합니다. 계정을 자동 감지하며 선택한 계정을 일괄 가져올 수 있습니다.',
   'auth.username': '사용자 이름',
   'auth.password': '비밀번호',
   'auth.login': '로그인',
