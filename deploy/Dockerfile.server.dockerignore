@@ -1,3 +1,6 @@
 *
 !dist
 !dist/aistudio2api
+!deploy
+deploy/*
+!deploy/check-login-deps.sh

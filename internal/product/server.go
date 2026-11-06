@@ -14,19 +14,16 @@ import (
 
 // Profile is deliberately build-time policy, rather than a user-switchable mode.
 type Profile struct {
-	Name               string   `json:"name"`
-	Studio             bool     `json:"studio"`
-	DisabledPages      []string `json:"disabledPages"`
-	Preview            bool     `json:"preview"`
-	PromptStore        bool     `json:"promptStore"`
-	ExtraProtocols     bool     `json:"extraProtocols"`
-	BodyCapture        bool     `json:"bodyCapture"`
-	Engine             string   `json:"engine"`
-	Channels           []string `json:"channels"`
-	WarmWorkers        int      `json:"warmWorkers"`
-	ActiveWorkers      int      `json:"activeWorkers"`
-	StartupConcurrency int      `json:"startupConcurrency"`
-	ManagedBy          string   `json:"managedBy"`
+	Name           string   `json:"name"`
+	Studio         bool     `json:"studio"`
+	DisabledPages  []string `json:"disabledPages"`
+	Preview        bool     `json:"preview"`
+	PromptStore    bool     `json:"promptStore"`
+	ExtraProtocols bool     `json:"extraProtocols"`
+	BodyCapture    bool     `json:"bodyCapture"`
+	Engine         string   `json:"engine"`
+	Channels       []string `json:"channels"`
+	ManagedBy      string   `json:"managedBy"`
 }
 
 //go:embed server.json
@@ -40,10 +37,22 @@ func Server() Profile {
 	return profile
 }
 
+// LoadConfig applies the distribution's listener and engine policy before
+// validation and backend-dependent defaults are selected.
+func LoadConfig(path string) (config.Config, error) {
+	p := Server()
+	cfg, err := config.LoadWithOptions(path, config.LoadOptions{DisablePreview: !p.Preview, ForceWAABackend: p.Engine})
+	if err != nil {
+		return config.Config{}, err
+	}
+	return Constrain(cfg), nil
+}
+
 // Constrain also applies to legacy .env imports and every runtime reload. No
 // migration path can re-enable a browser or silently send a PG model via Build.
 func Constrain(cfg config.Config) config.Config {
 	p := Server()
+	cfg.PreviewDisabled = !p.Preview
 	cfg.WAABackend = p.Engine
 	cfg.UpstreamChannels = slices.Clone(p.Channels)
 	cfg.ModelChannels = ""
@@ -52,9 +61,6 @@ func Constrain(cfg config.Config) config.Config {
 	cfg.FakeStream = false
 	cfg.StripThoughtSignatures = false
 	cfg.FirstEventHedge = config.FirstEventHedgeOff
-	cfg.WarmWorkerLimit = min(max(1, cfg.WarmWorkerLimit), p.WarmWorkers)
-	cfg.MaxActiveWorkers = min(max(cfg.WarmWorkerLimit, cfg.MaxActiveWorkers), p.ActiveWorkers)
-	cfg.WarmStartupConcurrency = min(max(1, cfg.WarmStartupConcurrency), p.StartupConcurrency)
 	cfg.AdminAuthEnabled = true
 	return cfg
 }

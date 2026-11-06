@@ -1,11 +1,12 @@
 """Exercise code rollback against isolated data, without Docker/AWS/Google."""
 import argparse
 import hashlib
+import json
 import os
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 class NativeEnvTests(unittest.TestCase):
@@ -17,6 +18,45 @@ class NativeEnvTests(unittest.TestCase):
             values = deployer.read_env(file, {"ADMIN_PASSWORD", "PROXY_API_KEY", "ADMIN_USERNAME"})
             self.assertEqual(values, {"ADMIN_PASSWORD": "alpha\\beta", "PROXY_API_KEY": "key#literal", "ADMIN_USERNAME": " spaced value "})
             self.assertEqual(deployer.env_value(r'"quote\" line\n\a\v\x41\101\u4e2d\U0001f600"'), 'quote" line\n\a\vAA中😀')
+
+    def test_health_check_uses_native_default_when_username_is_omitted(self):
+        self.assert_health_username("", "admin")
+
+    def test_health_check_preserves_custom_username(self):
+        self.assert_health_username("ADMIN_USERNAME=synthetic-owner\n", "synthetic-owner")
+
+    def assert_health_username(self, username_line, expected_username):
+        import host_deploy as deployer
+        with tempfile.TemporaryDirectory() as temporary:
+            data = Path(temporary)
+            (data / ".env").write_text(
+                username_line + "ADMIN_PASSWORD=synthetic-password\nPROXY_API_KEY=synthetic-model-key\n",
+                encoding="utf-8",
+            )
+            logins = []
+
+            def http(request, timeout):
+                response = MagicMock()
+                response.__enter__.return_value = response
+                path = request.full_url.removeprefix("http://127.0.0.1:2049")
+                token = request.get_header("Authorization")
+                cookie = request.get_header("Cookie")
+                response.status = 401
+                if path == "/health":
+                    response.status = 200
+                elif path == "/api/auth/login":
+                    logins.append(json.loads(request.data))
+                    response.status = 200
+                    response.headers = {"Set-Cookie": "synthetic-session=ok; HttpOnly"}
+                elif path == "/api/accounts" and cookie == "synthetic-session=ok":
+                    response.status = 200
+                elif path == "/v1/models" and token == "Bearer synthetic-model-key":
+                    response.status = 200
+                return response
+
+            with patch.object(deployer, "DATA", data), patch.object(deployer, "urlopen", http):
+                deployer.verify_health(2049)
+            self.assertEqual(logins, [{"username": expected_username, "password": "synthetic-password"}])
 
 
 @unittest.skipUnless(os.name == "posix", "host updater is Linux-only")

@@ -868,7 +868,7 @@ func accountOperationError(err error) error {
 }
 
 func (admin *runtimeAdmin) RuntimeConfig(context.Context) (api.RuntimeConfig, error) {
-	cfg, err := config.Load(admin.configPath)
+	cfg, err := product.LoadConfig(admin.configPath)
 	if err != nil {
 		return api.RuntimeConfig{}, err
 	}
@@ -880,7 +880,7 @@ func (admin *runtimeAdmin) RuntimeConfig(context.Context) (api.RuntimeConfig, er
 }
 
 func (admin *runtimeAdmin) UpdateRuntimeConfig(_ context.Context, value api.RuntimeConfig) (api.RuntimeConfig, error) {
-	saved, err := config.Load(admin.configPath)
+	saved, err := product.LoadConfig(admin.configPath)
 	if err != nil {
 		return api.RuntimeConfig{}, err
 	}

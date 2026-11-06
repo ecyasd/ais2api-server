@@ -134,6 +134,8 @@ def atomic_write(path, raw):
 def verify_health(port):
     values = read_env(DATA / ".env", {"ADMIN_USERNAME", "ADMIN_PASSWORD", "PROXY_API_KEY"})
     admin = values["ADMIN_PASSWORD"]
+    # Native Config.Save omits values equal to Config.Default, including "admin".
+    username = values.get("ADMIN_USERNAME", "admin")
     keys = [key.strip() for key in values.get("PROXY_API_KEY", "").split(",") if key.strip()]
     origin = f"http://127.0.0.1:{port}"
 
@@ -157,7 +159,7 @@ def verify_health(port):
     else:
         raise RuntimeError("health-timeout")
     login = Request(origin + "/api/auth/login", method="POST", headers={"Content-Type":"application/json"},
-                    data=json.dumps({"username":values["ADMIN_USERNAME"],"password":admin}).encode())
+                    data=json.dumps({"username":username,"password":admin}).encode())
     with urlopen(login, timeout=5) as response:
         session_cookie = response.headers["Set-Cookie"].split(";", 1)[0]
     assert status("/api/accounts", cookie=session_cookie) == 200
