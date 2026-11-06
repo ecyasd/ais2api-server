@@ -49,6 +49,13 @@ const values = computed(() => {
 function duration(value: number | null | undefined): string {
   return value == null ? '—' : `${(value / 1000).toFixed(2)} s`
 }
+
+function result(state: string): string {
+  return (
+    ({ completed: '完成', failed: '失败', running: '进行中' } as Record<string, string>)[state] ??
+    state
+  )
+}
 </script>
 
 <template>
@@ -73,12 +80,17 @@ function duration(value: number | null | undefined): string {
         <li v-for="attempt in report.attempts" :key="attempt.number">
           尝试 {{ attempt.number }} ·
           {{ attempt.channel === 'assistant' ? 'Build 代码助手' : 'PG' }} ·
-          {{ duration(attempt.duration_ms) }} · {{ attempt.state }}
+          {{ duration(attempt.duration_ms) }} · {{ result(attempt.state) }}
         </li>
       </ol>
       <p v-if="report.upstream_rounds?.length" class="mt-3 text-xs text-gray-500">
         上游生成轮次：{{ report.upstream_rounds.length }}（包括内部重试）
       </p>
+      <ol class="mt-1 space-y-1 text-xs text-gray-400">
+        <li v-for="round in report.upstream_rounds ?? []" :key="round.number">
+          第 {{ round.number }} 轮 · {{ duration(round.duration_ms) }} · {{ result(round.state) }}
+        </li>
+      </ol>
     </template>
     <p v-else class="mt-2 text-xs text-gray-500" role="status">正在读取…</p>
   </section>

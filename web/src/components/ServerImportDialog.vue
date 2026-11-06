@@ -66,11 +66,7 @@ async function save(): Promise<void> {
 
 <template>
   <DetailDialog :open="true" title="导入账户 · 仅保存" @close="!busy && emit('close')">
-    <form
-      class="w-full max-w-2xl space-y-4 rounded-xl border border-line bg-panel p-6 shadow-xl"
-      @submit.prevent="save"
-    >
-      <h3 id="server-import-title" class="text-lg font-semibold text-white">导入账户 · 仅保存</h3>
+    <form class="space-y-4" @submit.prevent="save">
       <p class="text-sm leading-6 text-gray-400">
         支持完整状态、Cookie JSON、Netscape 文件和 Cookie 请求头。导入时不访问
         Google。原电脑配对可在账户菜单中使用。
