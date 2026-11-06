@@ -5,16 +5,6 @@ export { default as serverMessages } from '../../../internal/i18n/messages/ja.js
 
 // messages 是界面文案与管理接口错误码文案
 export const messages: Record<TranslationKey, string> = {
-  'accounts.remoteChromeHelp': '手元の PC の Chrome アカウントを検出し、選択して送信',
-  'accounts.remoteLoginHelp': '手元の PC で Google にログインして状態を送信',
-  'accounts.remoteBrowserHelp': '元の PC のブラウザーのデバッグアドレスから Cookie を読み取ります',
-  'accounts.remoteBrowser': '元の PC のブラウザー',
-  'accounts.remoteBrowserAddress': 'ブラウザーのデバッグアドレス',
-  'accounts.remoteAuthUser': 'Google セッション番号（0–9）',
-  'accounts.remoteBrowserAddressInvalid':
-    'ローカルアドレス（例：http://127.0.0.1:9222）と 0–9 のセッション番号を入力してください',
-  'accounts.cookieImportHint':
-    'Cookie ヘッダー、Cookie-Editor JSON、cookies.txt、完全な状態、複数ファイルに対応。アカウントを自動検出し、選択して一括インポートできます。',
   'auth.username': 'ユーザー名',
   'auth.password': 'パスワード',
   'auth.login': 'ログイン',

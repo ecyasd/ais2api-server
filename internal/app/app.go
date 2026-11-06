@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -81,9 +80,6 @@ func runCommand(args []string, logs *logOutput, executable string) (restart bool
 	defer cancel()
 
 	if len(args) != 0 && args[0] == "setup" {
-		if runtime.GOOS != "windows" {
-			return false, fmt.Errorf("服务器请在管理页导入账户；原电脑配对助手仅在 Windows 上运行")
-		}
 		return false, setup.Run(ctx, cfg, args[1:])
 	}
 	cfg = product.Constrain(cfg)

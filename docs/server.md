@@ -21,9 +21,13 @@ Implementation and migration acceptance are separate gates. A successful offline
 test suite does not imply live Google or SillyTavern acceptance.
 
 The shared policy is `internal/product/server.json`. It controls management
-navigation, public APIs, browser login, prompt/state databases, preview listeners,
+navigation, public model APIs, prompt/state databases, preview listeners,
 runtime engine and the 1 warm / 2 active / 1 startup worker baseline. Configuration
 reloads and imported legacy configuration pass through the same policy.
+
+Account import follows the pinned upstream implementation unchanged. The server
+profile does not rewrite Cookie input, replace account-add actions with pairing,
+change native import defaults or hide native browser-discovery routes.
 
 OpenAI Chat Completions is the primary contract. Gemini generation, streaming,
 model listing and counting remain available. Ordinary models use PG; `-build`

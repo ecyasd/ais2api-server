@@ -34,7 +34,6 @@ import UiCollapse from './UiCollapse.vue'
 import UiIcon from './UiIcon.vue'
 import UiPager from './UiPager.vue'
 import UiSelect from './UiSelect.vue'
-import { product } from '@/product'
 
 // CookieCandidate 是 Cookie 中识别出的账户，source 为所在 Cookie 来源的序号
 type CookieCandidate = CookieBrowser & { source: number }
@@ -100,19 +99,8 @@ const refreshDone = ref(0)
 const toggling = reactive(new Set<string>())
 const chromeProfiles = ref<ChromeImportProfile[]>([])
 const pairing = ref<PairingToken | null>(null)
-// 远程导入仍由 AIS2 setup 在原电脑读取凭据，不在服务器启动浏览器。
-const pairingSource = ref<'chrome' | 'login' | 'browser'>('chrome')
-const pairingBrowserAddress = ref('http://127.0.0.1:9222')
-const pairingAuthUser = ref(0)
-const pairingBrowserValid = computed(
-  () =>
-    /^(?:https?:\/\/)?(?:localhost|127(?:\.\d{1,3}){3}|\[::1\]):[1-9]\d{0,4}\/?$/.test(
-      pairingBrowserAddress.value.trim(),
-    ) &&
-    Number.isInteger(pairingAuthUser.value) &&
-    pairingAuthUser.value >= 0 &&
-    pairingAuthUser.value <= 9,
-)
+// pairingLogin 表示远程添加在新窗口登录，否则导入那台电脑 Chrome 中的账户
+const pairingLogin = ref(false)
 const copiedPairing = ref(false)
 // pairingTimer 在远程添加打开期间于令牌到期时换新
 let pairingTimer: number | undefined
@@ -130,10 +118,10 @@ const pairingLoopback = loopbackHost(window.location.hostname)
 // pairingAddress 是命令中的服务地址，本页经本机地址打开时可改为本服务的 HTTPS 地址
 const pairingAddress = ref(window.location.origin)
 // pairingCommand 是在能登录 Google 的电脑上运行的完整命令
-const pairingCommand = computed(() => {
-  if (pairingSource.value === 'browser' && !pairingBrowserValid.value) return ''
-  return `${pairingSystem.value === 'windows' ? 'cmd /c start /wait aistudio2api.exe' : './aistudio2api'} setup --remote ${pairingAddress.value.trim()} --token ${pairing.value?.token}${pairingSource.value === 'login' ? ' --login' : pairingSource.value === 'browser' ? ` --cdp ${pairingBrowserAddress.value.trim()} --authuser ${pairingAuthUser.value}` : ''}`
-})
+const pairingCommand = computed(
+  () =>
+    `${pairingSystem.value === 'windows' ? 'cmd /c start /wait aistudio2api.exe' : './aistudio2api'} setup --remote ${pairingAddress.value.trim()} --token ${pairing.value?.token}${pairingLogin.value ? ' --login' : ''}`,
+)
 // pairingInsecure 表示命令中的地址不是本机地址却未使用 HTTPS，setup 会拒绝这样的地址
 const pairingInsecure = computed(() => {
   const host = /^http:\/\/(\[[^\]]+\]|[^/:]+)/i.exec(pairingAddress.value.trim())?.[1]
@@ -423,11 +411,6 @@ async function openPairing(): Promise<void> {
   }
 }
 
-function openRemoteImport(source: 'chrome' | 'login' | 'browser'): void {
-  pairingSource.value = source
-  void openPairing()
-}
-
 // renewPairing 生成新的配对令牌，旧令牌随之失效
 async function renewPairing(): Promise<void> {
   pendingAction.value = 'pairing-renew'
@@ -448,7 +431,6 @@ function closePairing(): void {
 
 // copyPairing 复制配对命令
 async function copyPairing(): Promise<void> {
-  if (pairingSource.value === 'browser' && !pairingBrowserValid.value) return
   try {
     await navigator.clipboard.writeText(pairingCommand.value)
     copiedPairing.value = true
@@ -523,13 +505,6 @@ function scheduleCookieDiscovery(): void {
   cookieDiscoveryTimer = window.setTimeout(() => void discoverCookieAccounts(), 400)
 }
 
-watch(
-  () => accountEnvironment.proxy,
-  () => {
-    if (showCookieImport.value) scheduleCookieDiscovery()
-  },
-)
-
 // cookieSources 返回待识别的 Cookie：选择的各个文件，没有选择文件时为粘贴的文本
 function cookieSources(): { name: string; text: string }[] {
   return cookieFiles.value.length > 0 ? cookieFiles.value : [{ name: '', text: cookieText.value }]
@@ -564,16 +539,11 @@ async function discoverCookieAccounts(): Promise<void> {
     const found: CookieCandidate[] = []
     for (const [source, item] of sources.entries()) {
       failed = item.name
-      try {
-        const discovered = await api.discoverCookieAccounts({
-          cookies: item.text,
-          proxy: accountEnvironment.proxy,
-        })
-        found.push(...discovered.map((candidate) => ({ ...candidate, source })))
-      } catch (error) {
-        if (sequence === cookieDiscovery)
-          cookieDiscoveryError.value += `${item.name ? `${item.name}: ` : ''}${errorText(error)}\n`
-      }
+      const discovered = await api.discoverCookieAccounts({
+        cookies: item.text,
+        proxy: accountEnvironment.proxy,
+      })
+      found.push(...discovered.map((candidate) => ({ ...candidate, source })))
     }
     if (sequence !== cookieDiscovery) return
     cookieCandidates.value = found
@@ -594,7 +564,7 @@ function cookieKey(candidate: CookieCandidate): string {
 
 // importableCookieUsers 是 Cookie 中尚未导入的账户
 const importableCookieUsers = computed(() =>
-  cookieCandidates.value.filter((item) => product.cookieImport || !item.imported).map(cookieKey),
+  cookieCandidates.value.filter((item) => !item.imported).map(cookieKey),
 )
 
 const allCookieCandidatesSelected = computed(
@@ -692,7 +662,7 @@ async function importBrowserAccounts(): Promise<void> {
   }
 }
 
-// 保留 AIS2 的全部添加方式；服务器将需要浏览器的来源交给原生远程 setup。
+// addMethods 是“添加账户”菜单中的导入方式，顺序按常用程度；服务所在平台不能从 Chrome 导入时该项不可选并说明原因
 const addMethods = computed<
   {
     label: TranslationKey
@@ -704,20 +674,16 @@ const addMethods = computed<
 >(() => [
   {
     label: 'accounts.browserLogin',
-    help: product.browserLogin ? 'accounts.browserLoginHelp' : 'accounts.remoteLoginHelp',
+    help: 'accounts.browserLoginHelp',
     icon: 'login',
-    action: () => (product.browserLogin ? openBrowserLogin() : openRemoteImport('login')),
+    action: () => openBrowserLogin(),
   },
   {
     label: 'accounts.importChrome',
-    help: !product.browserLogin
-      ? 'accounts.remoteChromeHelp'
-      : props.chromeImport
-        ? 'accounts.importChromeHelp'
-        : 'accounts.importChromeUnavailable',
+    help: props.chromeImport ? 'accounts.importChromeHelp' : 'accounts.importChromeUnavailable',
     icon: 'importAccounts',
-    disabled: product.browserLogin && !props.chromeImport,
-    action: () => (product.browserLogin ? void openChromeImport() : openRemoteImport('chrome')),
+    disabled: !props.chromeImport,
+    action: () => void openChromeImport(),
   },
   {
     label: 'accounts.pasteCookie',
@@ -727,9 +693,9 @@ const addMethods = computed<
   },
   {
     label: 'accounts.readBrowser',
-    help: product.browserLogin ? 'accounts.readBrowserHelp' : 'accounts.remoteBrowserHelp',
+    help: 'accounts.readBrowserHelp',
     icon: 'fingerprint',
-    action: () => (product.browserLogin ? openBrowserImport() : openRemoteImport('browser')),
+    action: () => openBrowserImport(),
   },
   {
     label: 'accounts.remoteAdd',
@@ -1172,31 +1138,6 @@ async function refreshAllAccounts(): Promise<void> {
                   class="block truncate text-xs text-gray-500"
                   >{{ accountSummary(account) }}</span
                 >
-                <details v-if="!product.browserLogin" class="mt-1 text-xs text-gray-500">
-                  <summary class="cursor-pointer py-1 text-blue-400">凭据状态</summary>
-                  <p>
-                    最后成功使用：{{
-                      account.last_success_at
-                        ? new Date(account.last_success_at).toLocaleString(locale)
-                        : '尚无记录'
-                    }}
-                  </p>
-                  <p>
-                    凭据更新：{{
-                      account.credential_updated_at
-                        ? new Date(account.credential_updated_at).toLocaleString(locale)
-                        : '尚无记录'
-                    }}
-                  </p>
-                  <p>
-                    续签方式：{{
-                      account.renewal_mode === 'origin_computer' ? '原电脑配对' : '重新导入 Cookie'
-                    }}
-                  </p>
-                  <p v-if="account.import_completeness === 'partial'">
-                    原始属性不完整，建议重新导入完整导出。
-                  </p>
-                </details>
               </div>
             </div>
             <span class="shrink-0 text-xs text-gray-500 md:w-20"
@@ -1257,7 +1198,7 @@ async function refreshAllAccounts(): Promise<void> {
               class="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2 lg:flex-nowrap"
             >
               <button
-                v-if="product.browserLogin && account.state === 'auth_required'"
+                v-if="account.state === 'auth_required'"
                 class="rounded bg-green-600 px-3 py-1 text-xs text-white transition hover:bg-green-500 disabled:opacity-50"
                 type="button"
                 :disabled="
@@ -1540,7 +1481,6 @@ async function refreshAllAccounts(): Promise<void> {
             <ol class="mb-5 list-decimal space-y-1 pl-5 text-sm leading-6 text-gray-300">
               <li v-for="step in pasteSteps" :key="step">{{ t(step) }}</li>
             </ol>
-            <p class="mb-4 text-sm leading-6 text-gray-300">{{ t('accounts.cookieImportHint') }}</p>
             <div class="space-y-4">
               <div>
                 <div class="mb-1 flex items-center justify-between gap-3">
@@ -1634,9 +1574,7 @@ async function refreshAllAccounts(): Promise<void> {
                     :key="cookieKey(candidate)"
                     class="flex items-center gap-3 rounded border border-line bg-canvas p-3 transition"
                     :class="
-                      candidate.imported && !product.cookieImport
-                        ? 'opacity-60'
-                        : 'cursor-pointer hover:border-gray-600'
+                      candidate.imported ? 'opacity-60' : 'cursor-pointer hover:border-gray-600'
                     "
                   >
                     <input
@@ -1644,7 +1582,7 @@ async function refreshAllAccounts(): Promise<void> {
                       class="h-4 w-4 shrink-0 accent-blue-600"
                       type="checkbox"
                       :value="cookieKey(candidate)"
-                      :disabled="candidate.imported && !product.cookieImport"
+                      :disabled="candidate.imported"
                     />
                     <span class="min-w-0 flex-1">
                       <strong
@@ -1665,7 +1603,7 @@ async function refreshAllAccounts(): Promise<void> {
                       >
                     </span>
                     <span v-if="candidate.imported" class="shrink-0 text-xs text-gray-400">{{
-                      product.cookieImport ? t('common.relogin') : t('accounts.alreadyImported')
+                      t('accounts.alreadyImported')
                     }}</span>
                   </label>
                 </div>
@@ -1864,7 +1802,7 @@ async function refreshAllAccounts(): Promise<void> {
         </div>
         <div v-if="pairing" class="modal-overlay" @click.self="closePairing">
           <div
-            class="mx-4 max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-lg border border-line bg-panel p-6 shadow-xl"
+            class="mx-4 w-full max-w-lg rounded-lg border border-line bg-panel p-6 shadow-xl"
             role="dialog"
             aria-modal="true"
             aria-labelledby="pairing-title"
@@ -1891,7 +1829,7 @@ async function refreshAllAccounts(): Promise<void> {
                   <a
                     v-if="position > 0"
                     class="text-blue-400 hover:underline"
-                    href="https://github.com/Mag1cFall/AIStudio2API/releases/tag/v0.3.1"
+                    href="https://github.com/Mag1cFall/AIStudio2API/releases/latest"
                     target="_blank"
                     rel="noreferrer"
                     >{{ t('accounts.remoteDownload') }}</a
@@ -1923,65 +1861,26 @@ async function refreshAllAccounts(): Promise<void> {
               {{ t(pairingLoopback ? 'accounts.remoteHttpsAddress' : 'accounts.remoteHttps') }}
             </p>
             <div
-              class="mb-2 grid grid-cols-3 rounded-md border border-line bg-canvas p-0.5"
+              class="mb-2 grid grid-cols-2 rounded-md border border-line bg-canvas p-0.5"
               role="radiogroup"
               :aria-label="t('accounts.remoteSource')"
             >
               <button
-                v-for="source in ['chrome', 'login', 'browser'] as const"
-                :key="source"
+                v-for="login in [false, true]"
+                :key="String(login)"
                 type="button"
                 role="radio"
-                :aria-checked="pairingSource === source"
+                :aria-checked="pairingLogin === login"
                 class="rounded px-2.5 py-1 text-xs leading-4 transition-colors"
                 :class="
-                  pairingSource === source
+                  pairingLogin === login
                     ? 'bg-raised text-white'
                     : 'text-gray-400 hover:text-gray-200'
                 "
-                @click="pairingSource = source"
+                @click="pairingLogin = login"
               >
-                {{
-                  t(
-                    source === 'login'
-                      ? 'accounts.remoteLogin'
-                      : source === 'browser'
-                        ? 'accounts.remoteBrowser'
-                        : 'accounts.remoteChrome',
-                  )
-                }}
+                {{ t(login ? 'accounts.remoteLogin' : 'accounts.remoteChrome') }}
               </button>
-            </div>
-            <div v-if="pairingSource === 'browser'" class="mb-4 space-y-3">
-              <p class="text-sm leading-6 text-gray-400">{{ t('accounts.remoteBrowserHelp') }}</p>
-              <label class="block">
-                <span class="mb-1 block text-xs text-gray-400">{{
-                  t('accounts.remoteBrowserAddress')
-                }}</span>
-                <input
-                  v-model.trim="pairingBrowserAddress"
-                  class="w-full rounded border border-line bg-canvas px-3 py-2 font-mono text-sm text-white"
-                  spellcheck="false"
-                  autocomplete="off"
-                  placeholder="http://127.0.0.1:9222"
-                />
-              </label>
-              <label class="block">
-                <span class="mb-1 block text-xs text-gray-400">{{
-                  t('accounts.remoteAuthUser')
-                }}</span>
-                <input
-                  v-model.number="pairingAuthUser"
-                  class="w-24 rounded border border-line bg-canvas px-3 py-2 text-sm text-white"
-                  type="number"
-                  min="0"
-                  max="9"
-                  step="1"
-                />
-              </label>
-              <p v-if="!pairingBrowserValid" class="text-xs text-red-300" role="alert">
-                {{ t('accounts.remoteBrowserAddressInvalid') }}
-              </p>
             </div>
             <div
               class="mb-2 grid grid-cols-2 rounded-md border border-line bg-canvas p-0.5"
@@ -2020,7 +1919,6 @@ async function refreshAllAccounts(): Promise<void> {
                 v-if="clipboardAvailable"
                 class="flex shrink-0 items-center gap-1 rounded px-2 py-1 text-xs text-gray-400 transition hover:bg-raised hover:text-white"
                 type="button"
-                :disabled="pairingSource === 'browser' && !pairingBrowserValid"
                 @click="copyPairing"
               >
                 <UiIcon :name="copiedPairing ? 'check' : 'copy'" :size="13" />

@@ -15,9 +15,6 @@ import (
 
 // prepareWAABackend 按 WAA 后端准备运行依赖与账户登录驱动
 func prepareWAABackend(ctx context.Context, cfg config.Config, requests *requestRegistry, accounts int, proxy string) (string, aistudio.IsolatedLoginDriver, error) {
-	if !product.Server().BrowserLogin {
-		return "", disabledLoginDriver{}, nil
-	}
 	removeStaleCamoufoxProfiles(requests)
 	if cfg.WAABackend == config.WAABackendSpiderMonkey {
 		requests.log("service", "INFO", fmt.Sprintf("运行时装配 | 2/3 | WAA 后端=spidermonkey | 账户=%d", accounts))
@@ -55,12 +52,6 @@ func newWAAWorker(ctx context.Context, accountID string, options camoufoxnative.
 		return aistudio.NewSpiderMonkeyWorker(ctx, accountID, options)
 	}
 	return aistudio.NewNativeWorker(ctx, accountID, options)
-}
-
-type disabledLoginDriver struct{}
-
-func (disabledLoginDriver) Login(context.Context, aistudio.IsolatedLoginRequest) (aistudio.IsolatedLoginResult, error) {
-	return aistudio.IsolatedLoginResult{}, fmt.Errorf("服务器版关闭网页登录，请导入完整状态或在原电脑配对续签")
 }
 
 // lazyLoginDriver 在第一次登录或校验账户时定位 Camoufox 并创建登录驱动

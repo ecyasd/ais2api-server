@@ -5,18 +5,6 @@ export { default as serverMessages } from '../../../internal/i18n/messages/en.js
 
 // messages 是界面文案与管理接口错误码文案
 export const messages: Record<TranslationKey, string> = {
-  'accounts.remoteChromeHelp':
-    'Find Chrome accounts on your computer, select them and send them here',
-  'accounts.remoteLoginHelp': 'Sign in to Google on your computer and send the login here',
-  'accounts.remoteBrowserHelp':
-    'Read cookies on the source computer using its fingerprint browser debugging address',
-  'accounts.remoteBrowser': 'Source fingerprint browser',
-  'accounts.remoteBrowserAddress': 'Source browser debugging address',
-  'accounts.remoteAuthUser': 'Google session number (0–9)',
-  'accounts.remoteBrowserAddressInvalid':
-    'Enter a local debugging address such as http://127.0.0.1:9222 and a session number from 0 to 9',
-  'accounts.cookieImportHint':
-    'Paste a Cookie header, Cookie-Editor JSON, cookies.txt or full state, or select multiple files. Accounts are detected automatically; select accounts to import them together.',
   'auth.username': 'Username',
   'auth.password': 'Password',
   'auth.login': 'Sign in',
@@ -294,7 +282,7 @@ export const messages: Record<TranslationKey, string> = {
   'settings.authPath': 'Account state path',
   'settings.listen': 'Listen address',
   'settings.previewListen': 'Preview listen address',
-  'settings.apiKey': 'Model API keys',
+  'settings.apiKey': 'Local API key',
   'settings.apiKeyAccounts': 'Accounts per key',
   'settings.proxy': 'Default proxy',
   'settings.initTimeout': 'Init timeout',
@@ -337,8 +325,7 @@ export const messages: Record<TranslationKey, string> = {
   'models.channelSaved': 'Channel saved and in effect',
   'settings.activeValue': 'Active',
   'settings.pendingService': 'Saved values apply the next time the generation service starts',
-  'settings.pendingManagement':
-    'Restart the app to apply the listen address or management credentials',
+  'settings.pendingManagement': 'Restart the app to apply the listen address or API key',
   'settings.saved': 'Settings saved',
   'settings.savedService':
     'Settings saved. Stop and start the generation service at the bottom left to apply them.',
@@ -1577,7 +1564,7 @@ export const messages: Record<TranslationKey, string> = {
   'settings.addMapping': 'Add mapping',
   'settings.addModelChannel': 'Add model',
   'settings.apiKeyHelp':
-    'Press Enter or type a comma to add a key; pasting comma-separated keys adds each one. Changes apply when saved. Empty keys deny all model calls. Keys must differ from the management password.',
+    'Press Enter or type a comma to add a key; pasting comma-separated keys adds each one. When empty, only pages on this machine can call the API',
   'settings.apiKeyPlaceholder': 'Enter a key',
   'settings.apiKeyMore': 'Add another key',
   'settings.keyShow': 'Show key {key}',

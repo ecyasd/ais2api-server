@@ -5,16 +5,6 @@ export { default as serverMessages } from '../../../internal/i18n/messages/zh-TW
 
 // messages 是界面文案与管理接口错误码文案
 export const messages: Record<TranslationKey, string> = {
-  'accounts.remoteChromeHelp': '自動尋找你電腦上的 Chrome 帳戶，選取後傳送到這裡',
-  'accounts.remoteLoginHelp': '在你的電腦登入 Google，將登入狀態傳送到這裡',
-  'accounts.remoteBrowserHelp': '在原電腦讀取指紋瀏覽器的 Cookie；填寫該瀏覽器的偵錯位址',
-  'accounts.remoteBrowser': '該電腦的指紋瀏覽器',
-  'accounts.remoteBrowserAddress': '原電腦的瀏覽器偵錯位址',
-  'accounts.remoteAuthUser': 'Google 工作階段編號（0–9）',
-  'accounts.remoteBrowserAddressInvalid':
-    '請輸入本機偵錯位址，例如 http://127.0.0.1:9222，並選取 0–9 的工作階段編號',
-  'accounts.cookieImportHint':
-    '支援貼上 Cookie 標頭、Cookie-Editor JSON、cookies.txt 和完整狀態，也可一次選取多個檔案。輸入後自動辨識帳戶，勾選後批次匯入。',
   'auth.username': '使用者名稱',
   'auth.password': '密碼',
   'auth.login': '登入',
@@ -280,7 +270,7 @@ export const messages: Record<TranslationKey, string> = {
   'settings.authPath': '帳號狀態目錄',
   'settings.listen': '監聽位址',
   'settings.previewListen': '預覽監聽位址',
-  'settings.apiKey': '模型呼叫金鑰',
+  'settings.apiKey': '本機 API 金鑰',
   'settings.apiKeyAccounts': '各金鑰可用的帳號',
   'settings.proxy': '預設代理伺服器',
   'settings.initTimeout': '初始化逾時',
@@ -320,7 +310,7 @@ export const messages: Record<TranslationKey, string> = {
   'models.channelSaved': '通道已儲存，立即生效',
   'settings.activeValue': '目前生效',
   'settings.pendingService': '已儲存的值會在下次啟動生成服務時生效',
-  'settings.pendingManagement': '監聽位址或管理憑證需重新啟動程式才會生效',
+  'settings.pendingManagement': '監聽位址或 API 金鑰需重新啟動程式才會生效',
   'settings.saved': '設定已儲存',
   'settings.savedService': '設定已儲存，請在左下角停止並重新啟動生成服務以套用',
   'settings.savedManagement': '設定已儲存，請重新啟動程式以套用',
@@ -1476,7 +1466,7 @@ export const messages: Record<TranslationKey, string> = {
   'settings.addMapping': '新增對應',
   'settings.addModelChannel': '新增模型',
   'settings.apiKeyHelp':
-    '輸入金鑰後按 Enter 或逗號加入，也可貼上以逗號分隔的多個金鑰。儲存後立即生效；留空會拒絕所有模型呼叫。金鑰必須與管理密碼不同。',
+    '輸入金鑰後按 Enter 或逗號加入，也可貼上以逗號分隔的多個金鑰；留空時只有本機頁面能呼叫',
   'settings.apiKeyPlaceholder': '輸入金鑰',
   'settings.apiKeyMore': '再加一把金鑰',
   'settings.keyShow': '顯示金鑰 {key}',

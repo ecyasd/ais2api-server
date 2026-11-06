@@ -71,7 +71,7 @@ func TestPairingTokenAccount(t *testing.T) {
 		if token != "" {
 			header.Set("Authorization", "Bearer "+token)
 		}
-		body := `{"label":"a@example.com","locale":"en-US","timezone":"UTC","auth_user":0,"storage_state":{"cookies":[],"origins":[]},"fingerprint":{"config":{"a":1}}}`
+		body := `{"label":"a@example.com","locale":"en-US","timezone":"UTC","storage_state":{"cookies":[],"origins":[]},"fingerprint":{"config":{"a":1}}}`
 		return serve("POST", "/api/pairing/accounts", body, header).Code
 	}
 	if response := serve("GET", "/api/pairing", "", session); response.Code != http.StatusNotFound {
@@ -105,9 +105,6 @@ func TestPairingTokenAccount(t *testing.T) {
 	}
 	if len(admin.imported) != 3 || admin.imported[0].Label != "a@example.com" || string(admin.imported[0].Fingerprint) != `{"config":{"a":1}}` {
 		t.Fatalf("导入内容 = %+v", admin.imported)
-	}
-	if !admin.imported[0].AuthUserProvided || admin.imported[0].AuthUser != 0 {
-		t.Fatal("native helper's explicit first session must replace the previous session selector")
 	}
 }
 

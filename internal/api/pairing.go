@@ -23,15 +23,13 @@ type PairingToken struct {
 
 // AccountStateInput 是远程配对上传或管理端 Cookie 导入的账户认证状态与 Camoufox 指纹
 type AccountStateInput struct {
-	ImportCompleteness string                `json:"-"`
-	AuthUserProvided   bool                  `json:"-"`
-	Label              string                `json:"label"`
-	Proxy              string                `json:"-"`
-	Locale             string                `json:"locale"`
-	Timezone           string                `json:"timezone"`
-	AuthUser           int                   `json:"auth_user"`
-	StorageState       aistudio.StorageState `json:"storage_state"`
-	Fingerprint        json.RawMessage       `json:"fingerprint,omitempty"`
+	Label        string                `json:"label"`
+	Proxy        string                `json:"-"`
+	Locale       string                `json:"locale"`
+	Timezone     string                `json:"timezone"`
+	AuthUser     int                   `json:"auth_user"`
+	StorageState aistudio.StorageState `json:"storage_state"`
+	Fingerprint  json.RawMessage       `json:"fingerprint,omitempty"`
 	// RenewalToken 是配对上传为该账户签发的续签凭据，只由服务端设置
 	RenewalToken string `json:"-"`
 }
@@ -104,7 +102,6 @@ func (s *server) handlePairingAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input.RenewalToken = rand.Text()
-	input.AuthUserProvided = true
 	account, err := s.config.Admin.ImportAccountState(r.Context(), input)
 	if err != nil {
 		writeAdminUpstreamError(w, err)

@@ -58,23 +58,21 @@ as a template. Supply separate administrator and model credentials. A missing
 management password prevents startup; empty model keys deny model access. Do not
 put mutable model keys in container environment variables, as environment values
 override the management page. `AUTO_START=false` preserves explicit owner control
-over account activation. Imported accounts are saved disabled, without network
-verification; enabling an account or starting generation is a separate operation.
-Cookie import uses AIS2's native account recognition, multiple file selection,
-account checkboxes and batch task list. Raw Cookie discovery contacts Google only
-after the owner supplies import data; it does not start a browser or call a model.
-Complete native exports keep their identity and environment metadata. Existing
-accounts can be selected to replace credentials without deleting the account.
-All five AIS2 account-addition entries remain visible. Browser login, Chrome
-discovery and fingerprint-browser Cookie reading use the native remote-pairing
-dialog on this server. Run its command on the source computer using the pinned
-upstream v0.3.1 helper: Chrome discovery uses `setup --remote`, new-window login
-adds `--login`, and fingerprint-browser reading adds `--cdp` with the source
-computer's local debugging address and `--authuser` (0–9). These commands send
-native account state to the server; the server never launches a browser or reads
-the web visitor's browser through a cloud-side scan. Cookie text and files are
-imported directly in the management page. Ordinary Cookie formats reach native
-discovery unchanged; the full-state adapter only handles complete state envelopes.
+over automatic generation startup. Account import follows upstream v0.3.1
+unchanged: `AccountsPanel.vue`, Cookie parsing, account recognition, batch tasks,
+pairing, import defaults and duplicate-account handling are the native code.
+There is no additional server import endpoint, state-envelope adapter, offline
+identity shortcut, automatic credential replacement or forced-disabled import.
+
+The fingerprint-browser entry calls native browser discovery, automatically
+lists accounts and imports selected sessions. Upstream discovery enumerates
+debugging browser processes on the machine running AIS2; it does not enumerate
+the web visitor's computer. Chrome import retains upstream platform availability.
+The separate remote-add dialog retains its original two choices and commands.
+Browser login remains an explicit native account operation. Startup and model
+generation use SpiderMonkey; deployment does not open a browser or import an
+account automatically. Account discovery and imports may check Google when the
+owner invokes them, as upstream does.
 
 ## Data inventory and consistent recovery
 
@@ -85,10 +83,9 @@ Keep private data and backups outside Git and release artifacts.
 
 Prefer original complete exports or native AIS2 state. Simplified legacy Cookie
 name/value maps have already lost domain/path/expiry/security attributes; the
-Cookie-header importer marks these as partial. Do not label them lossless. The
-AIS2 import API accepts a complete `storage_state` envelope with locale, timezone
-and auth-user; the UI supports pasted input and multiple files. Full source
-extensions and pairing renewal material remain native. The server does not renew
+historical migration records identify these as partial. Do not label them lossless.
+AIS2's native Cookie UI supports pasted input and multiple files; its original
+pairing and setup commands handle native state. The server does not renew
 a revoked Google login merely by refreshing a WAA signature. Origin-PC pairing
 helpers run on the source Windows machine and push replacement credentials.
 
