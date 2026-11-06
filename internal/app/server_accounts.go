@@ -20,7 +20,9 @@ func (admin *runtimeAdmin) replaceImportedState(ctx context.Context, id string, 
 		return api.AdminAccount{}, errors.Join(err, lease.Release())
 	}
 	cfg := account.Config
-	cfg.AuthUser = input.AuthUser
+	if input.AuthUserProvided || input.RenewalToken != "" {
+		cfg.AuthUser = input.AuthUser
+	}
 	if input.Locale != "" {
 		cfg.Locale = input.Locale
 	}

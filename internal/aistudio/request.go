@@ -229,25 +229,32 @@ func linkFunctionResults(content Content, pendingCalls *[]FunctionCall) (Content
 		if matched < 0 && result.ID == "" && len(*pendingCalls) == 1 && (result.Name == "" || result.Name == (*pendingCalls)[0].Name) {
 			matched = 0
 		}
+		if matched < 0 && result.ID == "" && result.Name != "" {
+			for candidate, call := range *pendingCalls {
+				if call.Name == result.Name {
+					if matched >= 0 {
+						return Content{}, fmt.Errorf("part %d: 同名函数结果需要调用 ID", index)
+					}
+					matched = candidate
+				}
+			}
+		}
 		if matched < 0 {
-			if result.ID != "" {
-				return Content{}, fmt.Errorf("part %d: function result ID 没有对应调用", index)
-			}
-			if result.Name == "" {
-				return Content{}, fmt.Errorf("part %d: function result 缺少名称且无法唯一关联调用", index)
-			}
-			continue
+			return Content{}, fmt.Errorf("part %d: function result 没有可唯一关联的调用", index)
 		}
 		if result.Name != "" && result.Name != (*pendingCalls)[matched].Name {
 			return Content{}, fmt.Errorf("part %d: function result 名称与调用不一致", index)
 		}
-		if result.Name == "" {
+		if result.Name == "" || result.ID == "" {
 			if !cloned {
 				content.Parts = slices.Clone(content.Parts)
 				cloned = true
 			}
 			named := *result
 			named.Name = (*pendingCalls)[matched].Name
+			if named.ID == "" {
+				named.ID = (*pendingCalls)[matched].ID
+			}
 			content.Parts[index].FunctionResult = &named
 		}
 		*pendingCalls = slices.Delete(*pendingCalls, matched, matched+1)

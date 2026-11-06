@@ -60,6 +60,7 @@ jobs:
           target: linux-amd64-gnu
       - name: Upstream and server contracts
         run: |
+          python3 -m unittest discover -s deploy -p 'test_*.py'
           go test -mod=readonly -trimpath -vet=off ./cmd/... ./internal/...
           go vet -mod=readonly -trimpath ./cmd/... ./internal/...
       - uses: mlugg/setup-zig@v2

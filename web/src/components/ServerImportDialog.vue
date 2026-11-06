@@ -7,15 +7,19 @@ const text = ref('')
 const label = ref('')
 const locale = ref('')
 const timezone = ref('')
-const authUser = ref(0)
-const files = ref<{ name: string; text: string }[]>([])
+const authUser = ref<number | string>('')
+const files = ref<{ name: string; text: string; label: string }[]>([])
 const busy = ref(false)
 const message = ref('')
 
 async function chooseFiles(event: Event): Promise<void> {
   const selected = (event.target as HTMLInputElement).files
   files.value = await Promise.all(
-    Array.from(selected ?? []).map(async (file) => ({ name: file.name, text: await file.text() })),
+    Array.from(selected ?? []).map(async (file) => ({
+      name: file.name,
+      text: await file.text(),
+      label: '',
+    })),
   )
 }
 
@@ -24,17 +28,18 @@ async function save(): Promise<void> {
   message.value = ''
   let saved = 0
   try {
-    const sources = files.value.length > 0 ? files.value : [{ name: '', text: text.value }]
+    const sources =
+      files.value.length > 0 ? files.value : [{ name: '', text: text.value, label: label.value }]
     for (const source of sources) {
       const response = await fetch('/api/accounts/import/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           data: source.text,
-          label: label.value,
+          label: sources.length > 1 ? source.label : label.value || source.label,
           locale: locale.value,
           timezone: timezone.value,
-          auth_user: authUser.value,
+          auth_user: authUser.value === '' ? undefined : Number(authUser.value),
         }),
       })
       const result = (await response.json()) as {
@@ -71,7 +76,7 @@ async function save(): Promise<void> {
         Google。原电脑配对可在账户菜单中使用。
       </p>
       <label class="block text-sm text-gray-300"
-        >账户名称或邮箱（完整状态已有身份时可留空）
+        >账户邮箱（完整状态已有身份时可留空）
         <input
           v-model.trim="label"
           autofocus
@@ -79,6 +84,16 @@ async function save(): Promise<void> {
           autocomplete="off"
         />
       </label>
+      <div v-if="files.length > 1" class="space-y-2">
+        <label v-for="file in files" :key="file.name" class="block text-xs text-gray-400"
+          >{{ file.name }}
+          <input
+            v-model.trim="file.label"
+            placeholder="此文件的账户邮箱，完整状态已有身份时可留空"
+            class="mt-1 w-full rounded border border-line bg-canvas p-2 text-sm text-white"
+          />
+        </label>
+      </div>
       <label class="block text-sm text-gray-300"
         >粘贴导出内容
         <textarea
@@ -122,6 +137,7 @@ async function save(): Promise<void> {
               v-model.number="authUser"
               type="number"
               min="0"
+              placeholder="沿用或 0"
               class="mt-1 w-full rounded border border-line bg-canvas p-2 text-white"
           /></label>
         </div>

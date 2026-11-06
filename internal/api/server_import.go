@@ -16,7 +16,7 @@ type serverImportInput struct {
 	Label    string `json:"label"`
 	Locale   string `json:"locale"`
 	Timezone string `json:"timezone"`
-	AuthUser int    `json:"auth_user"`
+	AuthUser *int   `json:"auth_user"`
 }
 
 func parseServerImport(input serverImportInput) (AccountStateInput, bool, error) {
@@ -29,6 +29,7 @@ func parseServerImport(input serverImportInput) (AccountStateInput, bool, error)
 		if err := json.Unmarshal([]byte(text), &envelope); err != nil {
 			return envelope, false, fmt.Errorf("完整账户状态格式无效")
 		}
+		_, envelope.AuthUserProvided = object["auth_user"]
 		_, wrapped := object["storage_state"]
 		if raw, exists := object["storage_state"]; exists {
 			text = string(raw)
@@ -62,8 +63,9 @@ func parseServerImport(input serverImportInput) (AccountStateInput, bool, error)
 	if input.Timezone != "" {
 		envelope.Timezone = input.Timezone
 	}
-	if input.AuthUser != 0 {
-		envelope.AuthUser = input.AuthUser
+	if input.AuthUser != nil {
+		envelope.AuthUser = *input.AuthUser
+		envelope.AuthUserProvided = true
 	}
 	return envelope, complete, nil
 }

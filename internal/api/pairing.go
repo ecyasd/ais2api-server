@@ -24,6 +24,7 @@ type PairingToken struct {
 // AccountStateInput 是远程配对上传或管理端 Cookie 导入的账户认证状态与 Camoufox 指纹
 type AccountStateInput struct {
 	ImportCompleteness string                `json:"-"`
+	AuthUserProvided   bool                  `json:"-"`
 	Label              string                `json:"label"`
 	Proxy              string                `json:"-"`
 	Locale             string                `json:"locale"`

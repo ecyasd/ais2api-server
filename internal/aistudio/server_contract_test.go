@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -141,5 +142,29 @@ func TestCorruptAccountDoesNotRemoveHealthyAccount(t *testing.T) {
 	}
 	if raw, _ := os.ReadFile(broken); string(raw) != "corrupt" {
 		t.Fatal("isolation modified source file")
+	}
+}
+
+func TestAssistantStreamsBodyAndPreservesToolResultIDs(t *testing.T) {
+	decoder := &AssistantStreamDecoder{Functions: []string{"lookup"}}
+	events := decoder.text("ordinary body")
+	if len(events) != 1 || events[0].Kind != EventText || events[0].Text != "ordinary body" {
+		t.Fatal("Build body buffered despite no tool call")
+	}
+	request := GenerateRequest{Contents: []Content{
+		{Role: RoleAssistant, Parts: []Part{{FunctionCall: &FunctionCall{ID: "a", Name: "lookup", Arguments: json.RawMessage(`{"n":1}`)}}, {FunctionCall: &FunctionCall{ID: "b", Name: "lookup", Arguments: json.RawMessage(`{"n":2}`)}}}},
+		{Role: RoleTool, Parts: []Part{{FunctionResult: &FunctionResult{ID: "b", Content: json.RawMessage(`{"result":2}`)}}, {FunctionResult: &FunctionResult{ID: "a", Content: json.RawMessage(`{"result":1}`)}}}},
+	}}
+	transcribed, err := assistantToolPrompt(request, 0, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(transcribed.Contents)
+	if !strings.Contains(string(raw), `\"id\":\"b\"`) {
+		t.Fatal("Build transcript lost call IDs")
+	}
+	level, err := assistantThinkingLevel(GenerationConfig{ReasoningEffort: "low"}, GenerationDefaults{ThinkingLevels: []int64{1, 2, 3}})
+	if err != nil || level != 1 {
+		t.Fatal("Build low reasoning effort changed", err)
 	}
 }

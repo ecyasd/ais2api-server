@@ -1,0 +1,18 @@
+services:
+  api:
+    image: ${SERVER_IMAGE:?Use the tested fixed server image tag or digest}
+    platform: linux/amd64
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${SERVER_PORT:-2049}:2048"
+    volumes:
+      - "${SERVER_DATA:?Set a dedicated persistent directory}:/data"
+    mem_limit: 1g
+    cpus: 1.5
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
