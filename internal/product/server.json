@@ -2,8 +2,6 @@
   "name": "AIS2 API Server",
   "studio": false,
   "disabledPages": ["/prompts", "/generate-speech", "/new_music", "/live", "/library"],
-  "browserLogin": false,
-  "cookieImport": true,
   "preview": false,
   "promptStore": false,
   "extraProtocols": false,

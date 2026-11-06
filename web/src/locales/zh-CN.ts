@@ -1,15 +1,5 @@
 // messages 是界面文案与管理接口错误码文案，键集合由本表定义
 export const messages = {
-  'accounts.remoteChromeHelp': '自动查找你电脑上的 Chrome 账号，选择后发送到这里',
-  'accounts.remoteLoginHelp': '在你的电脑登录 Google，登录状态发送到这里',
-  'accounts.remoteBrowserHelp': '在原电脑读取指纹浏览器的 Cookie；填写该浏览器的调试地址',
-  'accounts.remoteBrowser': '该电脑的指纹浏览器',
-  'accounts.remoteBrowserAddress': '原电脑的浏览器调试地址',
-  'accounts.remoteAuthUser': 'Google 会话序号（0–9）',
-  'accounts.remoteBrowserAddressInvalid':
-    '请输入本机调试地址，例如 http://127.0.0.1:9222，并选择 0–9 的会话序号',
-  'accounts.cookieImportHint':
-    '支持粘贴 Cookie 请求头、Cookie-Editor JSON、cookies.txt 和完整状态，也可一次选择多个文件。输入后自动识别账号，勾选后批量导入。',
   'auth.username': '管理员账号',
   'auth.password': '密码',
   'auth.login': '登录',
@@ -275,7 +265,7 @@ export const messages = {
   'settings.authPath': '账户状态目录',
   'settings.listen': '监听地址',
   'settings.previewListen': '预览监听地址',
-  'settings.apiKey': '模型调用密钥',
+  'settings.apiKey': '本地 API 密钥',
   'settings.apiKeyAccounts': '各密钥可用的账户',
   'settings.proxy': '默认代理',
   'settings.initTimeout': '初始化超时',
@@ -314,7 +304,7 @@ export const messages = {
   'models.channelSaved': '通道已保存，立即生效',
   'settings.activeValue': '当前生效',
   'settings.pendingService': '已保存值将在下次生成服务启动时生效',
-  'settings.pendingManagement': '监听地址或管理凭据需重启程序生效',
+  'settings.pendingManagement': '监听地址或 API 密钥需重启程序生效',
   'settings.saved': '配置已保存',
   'settings.savedService': '配置已保存，在左下角停止并重新启动生成服务后生效',
   'settings.savedManagement': '配置已保存，请重启程序',
@@ -1470,7 +1460,7 @@ export const messages = {
   'settings.addMapping': '添加映射',
   'settings.addModelChannel': '添加模型',
   'settings.apiKeyHelp':
-    '输入密钥后按 Enter 或逗号加入，也可粘贴逗号分隔的多个密钥。保存后立即生效；留空会拒绝所有模型调用。密钥必须与管理密码不同。',
+    '输入密钥后按 Enter 或逗号加入，也可粘贴逗号分隔的多个密钥；留空时只有本机页面能调用',
   'settings.apiKeyPlaceholder': '输入密钥',
   'settings.apiKeyMore': '再加一个密钥',
   'settings.keyShow': '显示密钥 {key}',

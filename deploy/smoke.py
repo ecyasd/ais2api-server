@@ -80,38 +80,44 @@ def run(binary):
             for path in ["/v1/responses", "/v1/images/generations", "/v1/live"]:
                 call(path, 404, key, {} if path != "/v1/live" else None)
             call("/api/prompts", 404, admin)
-            call("/api/accounts/import/chrome", 404, admin)
-            passed.append("excluded_pages_protocols_and_browser_routes")
+            call("/api/accounts/import/browsers", 200, admin)
+            call("/api/accounts/import/state", 404, admin, {})
+            passed.append("excluded_pages_protocols_and_native_browser_discovery")
             config = call("/api/config", 200, admin)
             assert config["waa_backend"] == "spidermonkey"
             assert not config["request_body_log"] and not config["fake_stream"]
             state = {"cookies": [{"name": name, "value": "synthetic-cookie", "domain": ".google.com", "path": "/", "expires": -1, "secure": True, "httpOnly": True, "sameSite": "Lax"} for name in ["__Secure-1PSID", "SAPISID", "__Secure-1PAPISID", "__Secure-3PAPISID"]], "origins": [], "aistudio2api": {"source": {"browser": "fixture", "email": "fixture@example.com"}}}
-            imported = call("/api/accounts/import/state", 200, admin, {"data": json.dumps({"storage_state": state, "auth_user": 2, "locale": "en-GB", "timezone": "Europe/London"})})
-            assert imported["verified_online"] is False and imported["account"]["enabled"] is False
-            assert imported["account"]["import_completeness"] == "full_state"
-            assert imported["account"]["locale"] == "en-GB"
-            passed.append("save_only_native_import_without_network")
-            wrapped = json.dumps({"storage_state": state, "auth_user": 2, "locale": "en-GB", "timezone": "Europe/London"})
-            discovered = call("/api/accounts/import/cookies/discover", 200, admin, {"cookies": wrapped})
-            assert discovered["accounts"][0]["email"] == "fixture@example.com"
-            assert discovered["accounts"][0]["imported"] is True and discovered["accounts"][0]["auth_user"] == 2
-            call("/api/accounts/import/cookies", 400, admin, {"items": [{"cdp": "127.0.0.1:9222"}]})
-            second_state = json.loads(json.dumps(state))
-            second_state["aistudio2api"]["source"]["email"] = "second@example.com"
-            second_wrapped = json.dumps({"storage_state": second_state, "auth_user": 1})
+            call("/api/accounts/import/cookies/discover", 400, admin, {"cookies": ""})
+            cookies = json.dumps(state["cookies"])
             batch = call("/api/accounts/import/cookies", 202, admin, {"items": [
-                {"email": "fixture@example.com", "cookies": wrapped, "auth_user": 2},
-                {"email": "second@example.com", "cookies": second_wrapped, "auth_user": 1},
+                {"email": "fixture@example.com", "cookies": cookies, "auth_user": 2},
+                {"email": "second@example.com", "cookies": cookies, "auth_user": 1},
             ], "locale": "zh-CN", "timezone": "Asia/Hong_Kong"})
             for _ in range(100):
                 task = next(item for item in call("/api/accounts/tasks", 200, admin)["tasks"] if item["id"] == batch["task"]["id"])
                 if task["state"] != "running":
-                    assert task["state"] == "done" and all(item["state"] == "done" for item in task["items"])
+                    # Upstream verifies Cookie sessions rather than trusting the
+                    # selected display email. Closed outbound access must reject
+                    # synthetic sessions, not revive a save-only import shortcut.
+                    assert task["state"] == "failed" and all(item["state"] == "failed" for item in task["items"])
                     break
                 time.sleep(0.05)
             else:
                 raise TimeoutError("synthetic native cookie batch")
-            passed.append("native_cookie_identity_batch_and_browserless_boundary")
+            assert call("/api/accounts", 200, admin)["accounts"] == []
+            passed.append("native_cookie_batch_requires_session_verification")
+            pairing = call("/api/pairing", 201, admin, {})["token"]
+            for email, auth_user in [("fixture@example.com", 2), ("second@example.com", 1)]:
+                source_state = json.loads(json.dumps(state))
+                source_state["aistudio2api"]["source"]["email"] = email
+                call("/api/pairing/accounts", 201, pairing, {"label": email, "storage_state": source_state,
+                     "auth_user": auth_user, "locale": "en-GB", "timezone": "Europe/London"})
+            call("/api/pairing/accounts", 409, pairing, {"label": "second@example.com", "storage_state": source_state,
+                 "auth_user": 1, "locale": "en-GB", "timezone": "Europe/London"})
+            accounts = call("/api/accounts", 200, admin)["accounts"]
+            assert len(accounts) == 2 and all(account["enabled"] for account in accounts)
+            assert not call("/api/status", 200, admin)["running"]
+            passed.append("native_pairing_defaults_and_duplicate_handling")
             config["proxy_api_key"] = "rotated-synthetic-key"
             call("/api/config", 200, admin, config, "PUT")
             call("/v1/models", 401, key)
@@ -131,7 +137,7 @@ def run(binary):
             assert json.loads((root / "auth/fixture@example.com/account.json").read_text())["auth_user"] == 2
             start()
             accounts = call("/api/accounts", 200, admin)["accounts"]
-            assert len(accounts) == 2 and all(not account["enabled"] for account in accounts)
+            assert len(accounts) == 2 and all(account["enabled"] for account in accounts)
             call("/v1/models", 401, "rotated-synthetic-key")
             passed.append("restart_persistence_and_no_unused_databases")
         finally:
