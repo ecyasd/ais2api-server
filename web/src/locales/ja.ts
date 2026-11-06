@@ -221,7 +221,8 @@ export const messages: Record<TranslationKey, string> = {
   'logs.reply': '応答',
   'logs.outputTotal': '出力の合計',
   'logs.averageSpeed': '平均速度',
-  'logs.firstToken': '最初のトークン',
+  'logs.firstEvent': '最初のイベント',
+  'logs.firstBody': '本文の最初の出力',
   'logs.details': '詳細',
   'logs.endpoint': 'エンドポイント',
   'logs.inputTokens': '入力トークン',
@@ -293,7 +294,7 @@ export const messages: Record<TranslationKey, string> = {
   'settings.requestTimeout': 'リクエストのタイムアウト',
   'settings.warmWorkerLimit': '常駐 Worker 数',
   'settings.maxActiveWorkers': 'ピーク時の Worker 上限',
-  'settings.warmStartupConcurrency': 'Camoufox の同時起動数',
+  'settings.warmStartupConcurrency': 'Worker の同時起動数',
   'settings.perAccountConcurrency': 'アカウントあたりの同時リクエスト数',
   'settings.routingStrategy': 'アカウントの選択方法',
   'settings.routingRoundRobin': 'ラウンドロビン',
@@ -1564,7 +1565,8 @@ export const messages: Record<TranslationKey, string> = {
   'settings.warmWorkerLimitHelp':
     '生成サービスの起動後にウォームアップしたまま常駐させるアカウントの数。',
   'settings.maxActiveWorkersHelp': 'ピーク時に同時実行する Worker の上限',
-  'settings.warmStartupConcurrencyHelp': '同時にコールド スタートする Camoufox Worker 数',
+  'settings.warmStartupConcurrencyHelp':
+    '同時にコールドスタートする Worker 数（SpiderMonkey と Camoufox 共通）',
   'settings.perAccountConcurrencyHelp': '1 つのアカウントで同時に実行するリクエストの数。',
   'settings.buildNativeHelp':
     '非ストリーミング リクエストは Build を優先し、使えない場合は Playground を使用',

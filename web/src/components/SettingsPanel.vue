@@ -644,7 +644,7 @@ async function saveConfig(): Promise<void> {
                 :class="inputClass"
                 type="number"
                 min="1"
-                :max="Math.min(form.max_active_workers, product.startupConcurrency)"
+                :max="form.max_active_workers"
               />
             </SettingRow>
             <SettingRow

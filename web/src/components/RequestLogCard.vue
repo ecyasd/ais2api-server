@@ -2,7 +2,14 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { api, ApiError } from '@/api'
 import { channelLabelKey, useI18n, type TranslationKey } from '@/i18n'
-import { byteLength, formatLogNumber, prettyBody, type LogRow } from '@/logs'
+import {
+  byteLength,
+  formatLogLatency,
+  formatLogNumber,
+  prettyBody,
+  requestLatencyMetrics,
+  type LogRow,
+} from '@/logs'
 import type { RequestBody } from '@/types'
 import DisclosureChevron from './DisclosureChevron.vue'
 import UiCollapse from './UiCollapse.vue'
@@ -17,6 +24,7 @@ const open = defineModel<boolean>('open', { required: true })
 const { t, locale, errorText, logText } = useI18n()
 const request = computed(() => props.row.entry.request!)
 const running = computed(() => request.value.state === 'running')
+const latencyMetrics = computed(() => requestLatencyMetrics(request.value))
 
 // now 是运行中请求每秒更新的当前时间
 const now = ref(Date.now())
@@ -155,22 +163,24 @@ const bodyParts = computed(() =>
       >
     </div>
     <p v-if="running && currentStep" class="request-step">{{ currentStep }}</p>
-    <div v-if="request.usage" class="request-metrics">
-      <span
-        >{{ t('logs.reasoning') }} <b>{{ number(request.usage.reasoning_tokens) }}</b></span
-      >
-      <span
-        >{{ t('logs.reply') }} <b>{{ number(request.usage.reply_tokens) }}</b></span
-      >
-      <span
-        >{{ t('logs.outputTotal') }} <b>{{ number(request.usage.output_tokens) }}</b> tokens</span
-      >
-      <span
-        >{{ t('logs.averageSpeed') }}
-        <b>{{ number(request.usage.average_tokens_per_second, 1) }}</b> tokens/s</span
-      >
-      <span v-if="request.first_event_ms !== undefined"
-        >{{ t('logs.firstToken') }} <b>{{ number(request.first_event_ms / 1000, 1) }}</b> s</span
+    <div v-if="request.usage || latencyMetrics.length" class="request-metrics">
+      <template v-if="request.usage">
+        <span
+          >{{ t('logs.reasoning') }} <b>{{ number(request.usage.reasoning_tokens) }}</b></span
+        >
+        <span
+          >{{ t('logs.reply') }} <b>{{ number(request.usage.reply_tokens) }}</b></span
+        >
+        <span
+          >{{ t('logs.outputTotal') }} <b>{{ number(request.usage.output_tokens) }}</b> tokens</span
+        >
+        <span
+          >{{ t('logs.averageSpeed') }}
+          <b>{{ number(request.usage.average_tokens_per_second, 1) }}</b> tokens/s</span
+        >
+      </template>
+      <span v-for="metric in latencyMetrics" :key="metric.label"
+        >{{ t(metric.label) }} <b>{{ formatLogLatency(metric.milliseconds, locale) }}</b></span
       >
     </div>
     <p v-if="request.error" class="request-error request-error-summary">

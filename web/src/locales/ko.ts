@@ -218,7 +218,8 @@ export const messages: Record<TranslationKey, string> = {
   'logs.reply': '응답',
   'logs.outputTotal': '출력 합계',
   'logs.averageSpeed': '평균 속도',
-  'logs.firstToken': '첫 토큰',
+  'logs.firstEvent': '첫 이벤트',
+  'logs.firstBody': '첫 본문 출력',
   'logs.details': '세부정보',
   'logs.endpoint': '엔드포인트',
   'logs.inputTokens': '입력 토큰',
@@ -290,7 +291,7 @@ export const messages: Record<TranslationKey, string> = {
   'settings.requestTimeout': '요청 제한 시간',
   'settings.warmWorkerLimit': '상주 Worker 수',
   'settings.maxActiveWorkers': '최대 Worker 수',
-  'settings.warmStartupConcurrency': 'Camoufox 동시 시작 수',
+  'settings.warmStartupConcurrency': 'Worker 동시 시작 수',
   'settings.perAccountConcurrency': '계정당 동시 요청 수',
   'settings.routingStrategy': '계정 선택 방식',
   'settings.routingRoundRobin': '라운드 로빈',
@@ -1546,7 +1547,8 @@ export const messages: Record<TranslationKey, string> = {
   'settings.authPathHelp': '계정 파일, 디렉터리 또는 쉼표로 구분한 여러 경로입니다.',
   'settings.warmWorkerLimitHelp': '생성 서비스 시작 후 예열 상태로 상주시킬 계정 수입니다.',
   'settings.maxActiveWorkersHelp': '피크 시 동시에 실행하는 최대 Worker 수',
-  'settings.warmStartupConcurrencyHelp': '동시에 콜드 스타트하는 Camoufox Worker 수',
+  'settings.warmStartupConcurrencyHelp':
+    '동시에 콜드 스타트하는 Worker 수(SpiderMonkey 및 Camoufox에 적용)',
   'settings.perAccountConcurrencyHelp': '계정 하나가 동시에 처리하는 요청 수입니다.',
   'settings.buildNativeHelp':
     '비스트리밍 요청은 Build를 우선하고, 사용할 수 없으면 Playground 사용',

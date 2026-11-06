@@ -220,7 +220,8 @@ export const messages: Record<TranslationKey, string> = {
   'logs.reply': 'Antwort',
   'logs.outputTotal': 'Ausgabe gesamt',
   'logs.averageSpeed': 'Durchschnittliche Geschwindigkeit',
-  'logs.firstToken': 'Erstes Token',
+  'logs.firstEvent': 'Erstes Ereignis',
+  'logs.firstBody': 'Erster Antworttext',
   'logs.details': 'Details',
   'logs.endpoint': 'Endpunkt',
   'logs.inputTokens': 'Eingabe-Tokens',
@@ -292,7 +293,7 @@ export const messages: Record<TranslationKey, string> = {
   'settings.requestTimeout': 'Zeitlimit für Anfragen',
   'settings.warmWorkerLimit': 'Vorgewärmte Worker',
   'settings.maxActiveWorkers': 'Worker-Limit bei Spitzenlast',
-  'settings.warmStartupConcurrency': 'Gleichzeitige Camoufox-Starts',
+  'settings.warmStartupConcurrency': 'Gleichzeitige Worker-Starts',
   'settings.perAccountConcurrency': 'Gleichzeitige Anfragen pro Konto',
   'settings.routingStrategy': 'Kontoauswahl',
   'settings.routingRoundRobin': 'Reihum',
@@ -1612,7 +1613,8 @@ export const messages: Record<TranslationKey, string> = {
   'settings.warmWorkerLimitHelp':
     'Anzahl der Konten, die nach dem Start des Generierungsdienstes vorgewärmt bereitstehen.',
   'settings.maxActiveWorkersHelp': 'Maximal gleichzeitig laufende Worker zu Spitzenzeiten',
-  'settings.warmStartupConcurrencyHelp': 'Gleichzeitig kalt startende Camoufox-Worker',
+  'settings.warmStartupConcurrencyHelp':
+    'Anzahl gleichzeitig kalt startender Worker für SpiderMonkey und Camoufox',
   'settings.perAccountConcurrencyHelp':
     'Anzahl der Anfragen, die ein Konto gleichzeitig bearbeitet.',
   'settings.buildNativeHelp': 'Nicht-Streaming-Anfragen nutzen bevorzugt Build, sonst Playground',
