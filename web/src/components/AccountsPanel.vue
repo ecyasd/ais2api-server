@@ -1864,7 +1864,7 @@ async function refreshAllAccounts(): Promise<void> {
         </div>
         <div v-if="pairing" class="modal-overlay" @click.self="closePairing">
           <div
-            class="mx-4 w-full max-w-lg rounded-lg border border-line bg-panel p-6 shadow-xl"
+            class="mx-4 max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-lg border border-line bg-panel p-6 shadow-xl"
             role="dialog"
             aria-modal="true"
             aria-labelledby="pairing-title"
