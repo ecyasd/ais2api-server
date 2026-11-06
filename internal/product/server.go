@@ -16,6 +16,7 @@ import (
 type Profile struct {
 	Name               string   `json:"name"`
 	Studio             bool     `json:"studio"`
+	DisabledPages      []string `json:"disabledPages"`
 	BrowserLogin       bool     `json:"browserLogin"`
 	Preview            bool     `json:"preview"`
 	PromptStore        bool     `json:"promptStore"`

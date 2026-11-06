@@ -275,7 +275,7 @@ func (store *Store) write(batch []write) (err error) {
 			if encodeErr != nil {
 				return encodeErr
 			}
-			if _, timingErr := tx.Exec(`INSERT OR REPLACE INTO server_request_timings (id,time,report) VALUES (?,?,?)`, item.timing.id, item.timing.report.StartedAt.UnixMilli(), string(encoded)); timingErr != nil {
+			if _, timingErr := tx.Exec(`INSERT INTO server_request_timings (id,time,revision,report) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET report=excluded.report, revision=excluded.revision WHERE excluded.revision >= server_request_timings.revision`, item.timing.id, item.timing.report.StartedAt.UnixMilli(), item.timing.report.Revision, string(encoded)); timingErr != nil {
 				return timingErr
 			}
 		}

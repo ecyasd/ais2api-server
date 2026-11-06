@@ -161,17 +161,21 @@ type AdminAccountCounts struct {
 
 // AdminAccount 表示管理端账户摘要
 type AdminAccount struct {
-	ID          string   `json:"id"`
-	Label       string   `json:"label"`
-	Enabled     bool     `json:"enabled"`
-	State       string   `json:"state"`
-	Proxy       string   `json:"proxy"`
-	Egress      string   `json:"egress"`
-	Locale      string   `json:"locale"`
-	Timezone    string   `json:"timezone"`
-	Models      []string `json:"models"`
-	BenefitTier string   `json:"benefit_tier"`
-	Message     string   `json:"message"`
+	LastSuccessAt       *time.Time `json:"last_success_at,omitempty"`
+	CredentialUpdatedAt *time.Time `json:"credential_updated_at,omitempty"`
+	RenewalMode         string     `json:"renewal_mode,omitempty"`
+	ImportCompleteness  string     `json:"import_completeness,omitempty"`
+	ID                  string     `json:"id"`
+	Label               string     `json:"label"`
+	Enabled             bool       `json:"enabled"`
+	State               string     `json:"state"`
+	Proxy               string     `json:"proxy"`
+	Egress              string     `json:"egress"`
+	Locale              string     `json:"locale"`
+	Timezone            string     `json:"timezone"`
+	Models              []string   `json:"models"`
+	BenefitTier         string     `json:"benefit_tier"`
+	Message             string     `json:"message"`
 
 	// PairingRenewedAt 是远程配对账户最近一次由原电脑续签的时间，没有经配对续签时省略
 	PairingRenewedAt *time.Time `json:"pairing_renewed_at,omitempty"`

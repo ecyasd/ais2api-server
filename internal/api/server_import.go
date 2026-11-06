@@ -29,13 +29,12 @@ func parseServerImport(input serverImportInput) (AccountStateInput, bool, error)
 		if err := json.Unmarshal([]byte(text), &envelope); err != nil {
 			return envelope, false, fmt.Errorf("完整账户状态格式无效")
 		}
+		_, wrapped := object["storage_state"]
 		if raw, exists := object["storage_state"]; exists {
-			if err := json.Unmarshal([]byte(text), &envelope); err != nil {
-				return envelope, false, fmt.Errorf("完整账户状态格式无效")
-			}
 			text = string(raw)
 		}
-		if err := json.Unmarshal([]byte(text), &state); err == nil && len(state.Cookies) > 0 && state.Validate() == nil {
+		native := wrapped || object["origins"] != nil || object["aistudio2api"] != nil
+		if err := json.Unmarshal([]byte(text), &state); native && err == nil && len(state.Cookies) > 0 && state.Validate() == nil {
 			complete = true
 		}
 	}
@@ -50,6 +49,10 @@ func parseServerImport(input serverImportInput) (AccountStateInput, bool, error)
 		return envelope, false, fmt.Errorf("缺少有效的签名 Cookie；请重新导出完整状态")
 	}
 	envelope.StorageState = state
+	envelope.ImportCompleteness = "partial"
+	if complete {
+		envelope.ImportCompleteness = "full_state"
+	}
 	if input.Label != "" {
 		envelope.Label = input.Label
 	}

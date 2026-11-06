@@ -226,14 +226,20 @@ func linkFunctionResults(content Content, pendingCalls *[]FunctionCall) (Content
 			continue
 		}
 		matched := slices.IndexFunc(*pendingCalls, func(call FunctionCall) bool { return result.ID != "" && call.ID == result.ID })
-		if matched < 0 && len(*pendingCalls) == 1 && (result.Name == "" || result.Name == (*pendingCalls)[0].Name) {
+		if matched < 0 && result.ID == "" && len(*pendingCalls) == 1 && (result.Name == "" || result.Name == (*pendingCalls)[0].Name) {
 			matched = 0
 		}
 		if matched < 0 {
+			if result.ID != "" {
+				return Content{}, fmt.Errorf("part %d: function result ID 没有对应调用", index)
+			}
 			if result.Name == "" {
 				return Content{}, fmt.Errorf("part %d: function result 缺少名称且无法唯一关联调用", index)
 			}
 			continue
+		}
+		if result.Name != "" && result.Name != (*pendingCalls)[matched].Name {
+			return Content{}, fmt.Errorf("part %d: function result 名称与调用不一致", index)
 		}
 		if result.Name == "" {
 			if !cloned {

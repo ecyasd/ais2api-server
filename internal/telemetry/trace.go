@@ -27,6 +27,7 @@ type Attempt struct {
 }
 
 type Report struct {
+	Revision          uint64            `json:"revision"`
 	StartedAt         time.Time         `json:"started_at"`
 	Stages            map[Stage]float64 `json:"stages_ms"`
 	FirstThought      *float64          `json:"first_thought_ms"`
@@ -40,6 +41,7 @@ type Report struct {
 	BodyEvents        int               `json:"body_events"`
 	ToolEvents        int               `json:"tool_events"`
 	Attempts          []Attempt         `json:"attempts"`
+	Rounds            []Attempt         `json:"upstream_rounds"`
 	OmittedAttempts   int               `json:"omitted_attempts"`
 }
 
@@ -61,13 +63,44 @@ func From(ctx context.Context) *Trace {
 }
 
 func (trace *Trace) snapshotLocked() Report {
+	trace.report.Revision++
 	report := trace.report
 	report.Stages = make(map[Stage]float64, len(trace.report.Stages))
 	for stage, value := range trace.report.Stages {
 		report.Stages[stage] = value
 	}
 	report.Attempts = slices.Clone(report.Attempts)
+	report.Rounds = slices.Clone(report.Rounds)
 	return report
+}
+
+func RoundStarted(ctx context.Context) func(bool) {
+	trace := From(ctx)
+	if trace == nil {
+		return func(bool) {}
+	}
+	started := time.Now()
+	trace.mu.Lock()
+	if len(trace.report.Rounds) >= 64 {
+		trace.mu.Unlock()
+		return func(bool) {}
+	}
+	index := len(trace.report.Rounds)
+	trace.report.Rounds = append(trace.report.Rounds, Attempt{Number: index + 1, State: "running"})
+	trace.mu.Unlock()
+	var once sync.Once
+	return func(success bool) {
+		once.Do(func() {
+			trace.mu.Lock()
+			round := &trace.report.Rounds[index]
+			round.DurationMS = float64(time.Since(started)) / float64(time.Millisecond)
+			round.State = "failed"
+			if success {
+				round.State = "completed"
+			}
+			trace.mu.Unlock()
+		})
+	}
 }
 
 func (trace *Trace) Snapshot() Report {

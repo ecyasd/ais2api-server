@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"slices"
 	"sync"
@@ -541,7 +542,13 @@ func (manager *runtimeManager) RuntimeConfig(ctx context.Context) (api.RuntimeCo
 
 // UpdateRuntimeConfig 保存生成服务配置，账户选择策略与容量设置立即作用于当前生成服务
 func (manager *runtimeManager) UpdateRuntimeConfig(ctx context.Context, value api.RuntimeConfig) (api.RuntimeConfig, error) {
+	manager.startMu.Lock()
+	defer manager.startMu.Unlock()
 	manager.mu.Lock()
+	if slices.Contains(config.APIKeys(value.APIKey), manager.activeManagement.AdminPassword) {
+		manager.mu.Unlock()
+		return api.RuntimeConfig{}, invalidConfigError(fmt.Errorf("调用密钥不能使用当前生效的管理密码"))
+	}
 	updated, err := manager.current.admin.UpdateRuntimeConfig(ctx, value)
 	if err == nil {
 		manager.activeManagement.ProxyAPIKey = updated.APIKey

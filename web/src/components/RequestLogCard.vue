@@ -8,6 +8,8 @@ import DisclosureChevron from './DisclosureChevron.vue'
 import UiCollapse from './UiCollapse.vue'
 import UiDisclosure from './UiDisclosure.vue'
 import UiIcon from './UiIcon.vue'
+import TimingSummary from './TimingSummary.vue'
+import { product } from '@/product'
 
 const props = defineProps<{ row: LogRow }>()
 // open 是详情是否展开，由日志页按行保存
@@ -220,6 +222,11 @@ const bodyParts = computed(() =>
             </dd>
           </template>
         </dl>
+        <TimingSummary
+          v-if="open && request.state !== 'running'"
+          :timing="request.timing"
+          :request-id="request.id"
+        />
         <ol class="request-timeline">
           <li v-for="(event, index) in row.events" :key="index">
             <time>{{ new Date(event.time).toLocaleTimeString(locale, { hour12: false }) }}</time>
@@ -243,7 +250,7 @@ const bodyParts = computed(() =>
           </UiCollapse>
         </section>
         <section
-          v-if="request.state !== 'running' && request.method === 'POST'"
+          v-if="product.bodyCapture && request.state !== 'running' && request.method === 'POST'"
           class="request-json"
         >
           <button

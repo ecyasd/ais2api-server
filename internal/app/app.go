@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -80,6 +81,9 @@ func runCommand(args []string, logs *logOutput, executable string) (restart bool
 	defer cancel()
 
 	if len(args) != 0 && args[0] == "setup" {
+		if runtime.GOOS != "windows" {
+			return false, fmt.Errorf("服务器请在管理页导入账户；原电脑配对助手仅在 Windows 上运行")
+		}
 		return false, setup.Run(ctx, cfg, args[1:])
 	}
 	cfg = product.Constrain(cfg)
@@ -376,8 +380,23 @@ func rootHandler(apiHandler http.Handler) http.Handler {
 	root.Handle("/v1beta/", apiHandler)
 	root.Handle("/upload/", apiHandler)
 	root.Handle("/media/", apiHandler)
-	root.Handle("/", webui.Handler())
+	root.Handle("/", serverWebHandler(webui.Handler()))
 	return securityHeaders(root)
+}
+
+func serverWebHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		profile := product.Server()
+		if !profile.Studio {
+			for _, prefix := range profile.DisabledPages {
+				if r.URL.Path == prefix || strings.HasPrefix(r.URL.Path, prefix+"/") {
+					http.NotFound(w, r)
+					return
+				}
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // compressAdmin 以 gzip 压缩管理接口发给接受 gzip 的客户端的 JSON、CSV 与事件流响应

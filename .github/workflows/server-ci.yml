@@ -78,6 +78,8 @@ jobs:
           version="v0.3.1+server.${GITHUB_SHA:0:12}"
           go build -mod=readonly -trimpath -tags netgo,osusergo -ldflags="-s -w -linkmode external -extldflags '-static -Wl,--strip-all -Wl,--gc-sections' -X github.com/Mag1cFall/AIStudio2API/internal/app.version=$version -X github.com/Mag1cFall/AIStudio2API/internal/app.managedBy=ais2api-server" -o dist/aistudio2api ./cmd/aistudio2api
           sha256sum dist/aistudio2api > dist/SHA256SUMS
+      - name: Isolated server acceptance
+        run: python3 deploy/smoke.py dist/aistudio2api
       - name: Build server image
         run: |
           docker build --platform linux/amd64 -f deploy/Dockerfile.server -t ais2api-server:${GITHUB_SHA} .

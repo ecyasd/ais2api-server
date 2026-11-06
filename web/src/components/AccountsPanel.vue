@@ -1153,6 +1153,31 @@ async function refreshAllAccounts(): Promise<void> {
                   class="block truncate text-xs text-gray-500"
                   >{{ accountSummary(account) }}</span
                 >
+                <details v-if="!product.browserLogin" class="mt-1 text-xs text-gray-500">
+                  <summary class="cursor-pointer py-1 text-blue-400">凭据状态</summary>
+                  <p>
+                    最后成功使用：{{
+                      account.last_success_at
+                        ? new Date(account.last_success_at).toLocaleString(locale)
+                        : '尚无记录'
+                    }}
+                  </p>
+                  <p>
+                    凭据更新：{{
+                      account.credential_updated_at
+                        ? new Date(account.credential_updated_at).toLocaleString(locale)
+                        : '尚无记录'
+                    }}
+                  </p>
+                  <p>
+                    续签方式：{{
+                      account.renewal_mode === 'origin_computer' ? '原电脑配对' : '重新导入 Cookie'
+                    }}
+                  </p>
+                  <p v-if="account.import_completeness === 'partial'">
+                    原始属性不完整，建议重新导入完整导出。
+                  </p>
+                </details>
               </div>
             </div>
             <span class="shrink-0 text-xs text-gray-500 md:w-20"
@@ -1213,7 +1238,7 @@ async function refreshAllAccounts(): Promise<void> {
               class="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2 lg:flex-nowrap"
             >
               <button
-                v-if="account.state === 'auth_required'"
+                v-if="product.browserLogin && account.state === 'auth_required'"
                 class="rounded bg-green-600 px-3 py-1 text-xs text-white transition hover:bg-green-500 disabled:opacity-50"
                 type="button"
                 :disabled="
@@ -1225,7 +1250,6 @@ async function refreshAllAccounts(): Promise<void> {
                 :aria-busy="
                   pendingAction === `login:${account.id}` || reloggingAccounts.has(account.id)
                 "
-                v-if="product.browserLogin"
                 @click="loginAccount(account)"
               >
                 {{ t('common.relogin') }}

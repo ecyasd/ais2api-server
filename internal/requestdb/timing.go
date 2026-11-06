@@ -10,7 +10,7 @@ import (
 
 const timingSchema = `
 CREATE TABLE IF NOT EXISTS server_request_timings (
- id TEXT PRIMARY KEY, time INTEGER NOT NULL, report TEXT NOT NULL);
+ id TEXT PRIMARY KEY, time INTEGER NOT NULL, revision INTEGER NOT NULL DEFAULT 0, report TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS server_request_timings_time ON server_request_timings(time);`
 
 type timingRow struct {

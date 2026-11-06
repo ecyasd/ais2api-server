@@ -82,7 +82,7 @@ func QuotaCooldownForError(err error, now time.Time) (QuotaCooldown, bool) {
 	} else if kind == "短期限额" && strings.Contains(message, "reached your usage limit") {
 		kind, escalate = PlanLimitKind, true
 	}
-	return QuotaCooldown{Until: until, Global: global, Kind: kind, Reason: kind + ": " + err.Error(), Escalate: escalate}, true
+	return QuotaCooldown{Until: until, Global: global, Kind: kind, Reason: kind, Escalate: escalate}, true
 }
 
 // BuildRejectionCooldown 返回 Build 代理以参数错误拒绝、同账户 Playground 完成的请求对应的 Build 递增冷却
@@ -91,7 +91,7 @@ func BuildRejectionCooldown(err error) (QuotaCooldown, bool) {
 	if !errors.As(err, &rpcError) || rpcError.StatusCode != http.StatusBadRequest || rpcError.Code != 3 {
 		return QuotaCooldown{}, false
 	}
-	return QuotaCooldown{Kind: "Build 拒绝", Reason: "Build 拒绝: " + err.Error(), Escalate: true}, true
+	return QuotaCooldown{Kind: "Build 拒绝", Reason: "Build 拒绝", Escalate: true}, true
 }
 
 // BuildGenerationDisabled 判断错误是上游停用 Build 代理生成的 PROXY_GENERATION_DISABLED

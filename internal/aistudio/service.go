@@ -500,7 +500,7 @@ func (s *PooledService) markRetryableFailure(ctx context.Context, lease *Account
 	now := time.Now()
 	cooldown, ok := QuotaCooldownForError(err, now)
 	if !ok {
-		cooldown = QuotaCooldown{Until: now.Add(30 * time.Second), Reason: err.Error()}
+		cooldown = QuotaCooldown{Until: now.Add(30 * time.Second), Reason: "upstream_failure"}
 	}
 	if cooldown.Global {
 		modelAccessScope = ""

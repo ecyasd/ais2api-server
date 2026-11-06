@@ -23,13 +23,14 @@ type PairingToken struct {
 
 // AccountStateInput 是远程配对上传或管理端 Cookie 导入的账户认证状态与 Camoufox 指纹
 type AccountStateInput struct {
-	Label        string                `json:"label"`
-	Proxy        string                `json:"-"`
-	Locale       string                `json:"locale"`
-	Timezone     string                `json:"timezone"`
-	AuthUser     int                   `json:"auth_user"`
-	StorageState aistudio.StorageState `json:"storage_state"`
-	Fingerprint  json.RawMessage       `json:"fingerprint,omitempty"`
+	ImportCompleteness string                `json:"-"`
+	Label              string                `json:"label"`
+	Proxy              string                `json:"-"`
+	Locale             string                `json:"locale"`
+	Timezone           string                `json:"timezone"`
+	AuthUser           int                   `json:"auth_user"`
+	StorageState       aistudio.StorageState `json:"storage_state"`
+	Fingerprint        json.RawMessage       `json:"fingerprint,omitempty"`
 	// RenewalToken 是配对上传为该账户签发的续签凭据，只由服务端设置
 	RenewalToken string `json:"-"`
 }

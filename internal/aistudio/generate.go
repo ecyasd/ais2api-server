@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Mag1cFall/AIStudio2API/internal/telemetry"
 	"io"
 	"net/http"
 	"regexp"
@@ -834,8 +835,10 @@ func (c *Client) Generate(ctx context.Context, request GenerateRequest) (<-chan 
 			return c.sendPlayground(ctx, wireRequest, entry)
 		}
 	}
+	endRound := telemetry.RoundStarted(ctx)
 	response, decodeStream, err := sendRequest()
 	if err != nil {
+		endRound(false)
 		return nil, err
 	}
 	matcher := newStopSequenceMatcher(request.Config.StopSequences)
@@ -931,10 +934,13 @@ func (c *Client) Generate(ctx context.Context, request GenerateRequest) (<-chan 
 		}
 		emit := stopSequenceEmitter(matcher, emitEvent, &matchedStopSequence)
 		err := decodeStream(observeStreamActivity(ctx, response.Body), emit)
+		endRound(err == nil && finish != nil)
 		for regenerated := 0; regenerated < regenerations && regenerable(ctx, err, finish, committed); regenerated++ {
 			stopClose()
 			_ = response.Body.Close()
+			endRound = telemetry.RoundStarted(ctx)
 			if response, decodeStream, err = sendRequest(); err != nil {
+				endRound(false)
 				if ctx.Err() == nil {
 					_ = send(Event{Kind: EventError, Err: err})
 				}
@@ -945,6 +951,7 @@ func (c *Client) Generate(ctx context.Context, request GenerateRequest) (<-chan 
 			matcher = newStopSequenceMatcher(request.Config.StopSequences)
 			emit = stopSequenceEmitter(matcher, emitEvent, &matchedStopSequence)
 			err = decodeStream(observeStreamActivity(ctx, response.Body), emit)
+			endRound(err == nil && finish != nil)
 		}
 		if releaseSources() != nil {
 			return

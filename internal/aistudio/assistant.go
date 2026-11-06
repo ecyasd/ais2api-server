@@ -77,12 +77,14 @@ var assistantCallFences = map[string]bool{"function_calls": true, "function_resu
 
 // assistantCall 是 function_calls 代码块中的一次调用
 type assistantCall struct {
+	ID        string          `json:"id,omitempty"`
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`
 }
 
 // assistantResult 是 function_results 代码块中的一个结果
 type assistantResult struct {
+	ID       string          `json:"id,omitempty"`
 	Name     string          `json:"name"`
 	Response json.RawMessage `json:"response"`
 }
@@ -227,9 +229,9 @@ func assistantToolPrompt(request GenerateRequest, start int, transcribed bool) (
 			next, entry := "", any(nil)
 			switch {
 			case part.FunctionCall != nil:
-				next, entry = assistantCallFence, assistantCall{Name: part.FunctionCall.Name, Arguments: transcriptJSON(part.FunctionCall.Arguments)}
+				next, entry = assistantCallFence, assistantCall{ID: part.FunctionCall.ID, Name: part.FunctionCall.Name, Arguments: transcriptJSON(part.FunctionCall.Arguments)}
 			case part.FunctionResult != nil:
-				next, entry = assistantResultFence, assistantResult{Name: part.FunctionResult.Name, Response: transcriptJSON(part.FunctionResult.Content)}
+				next, entry = assistantResultFence, assistantResult{ID: part.FunctionResult.ID, Name: part.FunctionResult.Name, Response: transcriptJSON(part.FunctionResult.Content)}
 			}
 			if next != fence {
 				if err := flush(); err != nil {
