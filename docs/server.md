@@ -31,6 +31,12 @@ selects the independent code assistant. Tools are a first-version requirement:
 declaration membership, mode, single-call requests, complete JSON, strict schema,
 call/result IDs and thought signatures are checked in offline contracts.
 
+For a fixed thinking level in SillyTavern's Custom OpenAI connection, use its
+additional request body, for example `reasoning_effort: low`. This also makes
+PG/Build comparisons explicit: use the same underlying model and the same actual
+thinking value. Do not infer the forwarded value from a client-side control that
+may only apply to the client's recognized OpenAI models.
+
 The native request ledger and usage aggregation remain upstream. A bounded
 `server_request_timings` extension table links timings by request ID, separates
 client-visible text from first semantic event, and records runtime attempts plus

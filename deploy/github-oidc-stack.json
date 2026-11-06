@@ -1,0 +1,254 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Controlled fixed Linux AIS2 server delivery from its independent GitHub repository to one existing node.",
+  "Metadata": {
+    "AWSToolsMetrics": {
+      "AWSAgentToolkit": "aws-cloudformation@3"
+    },
+    "com.aws.cloudformation.Context": {
+      "arch": "reviewed main -> fixed release -> explicit promotion -> existing OIDC role -> scoped SSM document -> root-owned updater",
+      "must": [
+        "Keep the existing Tokyo node and Region; create no additional infrastructure.",
+        "Use the independent AIS2 server repository and its fixed Linux amd64 artifacts.",
+        "Runtime config, credentials, accounts and statistics never enter release packages or code rollback.",
+        "Root-owned updater pins the repository, checks main/release provenance and archive SHA-256; releases cannot overwrite it.",
+        "Reuse the existing global GitHub OIDC provider and the existing two-resource delivery stack.",
+        "Use a stack name of at most 51 characters so its IAM role name fits the existing limit."
+      ]
+    }
+  },
+  "Parameters": {
+    "GitHubOwnerName": {
+      "Type": "String",
+      "Default": "ecyasd",
+      "AllowedPattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$",
+      "Description": "GitHub repository owner name; must match the host deployer's fixed repository."
+    },
+    "GitHubRepositoryName": {
+      "Type": "String",
+      "Default": "ais2api-server",
+      "AllowedPattern": "^[A-Za-z0-9_.-]{1,100}$",
+      "Description": "GitHub repository name; must match the host deployer's fixed repository."
+    },
+    "GitHubOwnerId": {
+      "Type": "String",
+      "Default": "151420095",
+      "AllowedPattern": "^[1-9][0-9]{0,19}$",
+      "Description": "Immutable GitHub repository owner ID."
+    },
+    "GitHubRepositoryId": {
+      "Type": "String",
+      "Default": "1448365881",
+      "AllowedPattern": "^[1-9][0-9]{0,19}$",
+      "Description": "Immutable GitHub repository ID."
+    },
+    "DeploymentBranch": {
+      "Type": "String",
+      "Default": "main",
+      "AllowedPattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$",
+      "Description": "Exact branch allowed to assume the deployment role; no GitHub environment subject is used."
+    },
+    "TargetManagedNodeId": {
+      "Type": "String",
+      "AllowedPattern": "^mi-[0-9a-f]{17}$",
+      "Description": "Existing verified API node in this stack region; no instance is created."
+    }
+  },
+  "Resources": {
+    "DeployDocument": {
+      "Type": "AWS::SSM::Document",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Trigger the root-owned fixed-repository Docker deployer without general shell access.",
+          "must": [
+            "Accept only a constrained release tag, commit and SHA-256; no caller paths, commands or URLs.",
+            "Verify the current protected branch, archive digest, image revision and health/auth checks.",
+            "Keep runtime environment, data and log mounts outside images."
+          ],
+          "mutable": "review-required"
+        }
+      },
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-Deploy"
+        },
+        "DocumentType": "Command",
+        "DocumentFormat": "YAML",
+        "TargetType": "/AWS::SSM::ManagedInstance",
+        "UpdateMethod": "NewVersion",
+        "Content": {
+          "schemaVersion": "2.2",
+          "description": "Deploy a verified Linux Docker image from the fixed GitHub repository.",
+          "parameters": {
+            "CommitSha": {
+              "type": "String",
+              "description": "Exact 40-character lowercase Git commit hash.",
+              "allowedPattern": "^[0-9a-f]{40}$",
+              "interpolationType": "ENV_VAR"
+            },
+            "ArtifactSha256": {
+              "type": "String",
+              "description": "Exact SHA-256 of the fixed server-image.tar.gz release asset.",
+              "allowedPattern": "^[0-9a-f]{64}$",
+              "interpolationType": "ENV_VAR"
+            },
+            "ReleaseTag": {
+              "type": "String",
+              "description": "Reviewed fixed server release tag.",
+              "allowedPattern": "^server-v[0-9][0-9A-Za-z.+-]{0,79}$",
+              "interpolationType": "ENV_VAR"
+            }
+          },
+          "mainSteps": [
+            {
+              "action": "aws:runShellScript",
+              "name": "deployPinnedRelease",
+              "precondition": {
+                "StringEquals": [
+                  "platformType",
+                  "Linux"
+                ]
+              },
+              "inputs": {
+                "timeoutSeconds": "1800",
+                "runCommand": [
+                  "#!/bin/sh\nset -eu\numask 077\ntest -n \"${SSM_ReleaseTag:-}\"\ntest -n \"${SSM_CommitSha:-}\"\ntest -n \"${SSM_ArtifactSha256:-}\"\nexec /bin/bash -c 'exec /usr/bin/python3 /usr/local/sbin/ais2api-server-deploy --tag \"$SSM_ReleaseTag\" --commit \"$SSM_CommitSha\" --sha256 \"$SSM_ArtifactSha256\"'\n"
+                ]
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Purpose",
+            "Value": "aistudio-code-deployment"
+          }
+        ]
+      }
+    },
+    "GitHubDeployRole": {
+      "Type": "AWS::IAM::Role",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "narrowly scoped deployment trigger; excludes general RunShellScript, document mutation and role passing",
+          "must": [
+            "Exact immutable owner/repository IDs and branch subject; never permit a repository wildcard.",
+            "SendCommand may target only this document and this one managed node.",
+            "No PassRole, Session Manager, IAM mutation, resource provisioning or cross-Region command access.",
+            "GetCommandInvocation requires Resource '*'; it can read other command output in this Region.",
+            "The original delivery stack retains ownership of the reused account-wide OIDC provider."
+          ],
+          "mutable": "review-required"
+        }
+      },
+      "Properties": {
+        "RoleName": {
+          "Fn::Sub": "${AWS::StackName}-GitHubDeploy"
+        },
+        "Description": "Trigger the fixed code-only deployer on one existing managed node.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "GitHubImmutableBranchOnly",
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+                }
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": {
+                    "Fn::Sub": "repo:${GitHubOwnerName}@${GitHubOwnerId}/${GitHubRepositoryName}@${GitHubRepositoryId}:ref:refs/heads/${DeploymentBranch}"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "DeploySingleManagedNode",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "RunOnlyDedicatedDeployer",
+                  "Effect": "Allow",
+                  "Action": "ssm:SendCommand",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:document/${DeployDocument}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:managed-instance/${TargetManagedNodeId}"
+                    }
+                  ],
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": {
+                        "Ref": "AWS::Region"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Sid": "ReadRegionalInvocationResult",
+                  "Effect": "Allow",
+                  "Action": "ssm:GetCommandInvocation",
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": {
+                        "Ref": "AWS::Region"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Purpose",
+            "Value": "aistudio-code-deployment"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "RoleArn": {
+      "Description": "Role assumed by the protected GitHub branch through OIDC.",
+      "Value": {
+        "Fn::GetAtt": [
+          "GitHubDeployRole",
+          "Arn"
+        ]
+      }
+    },
+    "DocumentName": {
+      "Description": "Dedicated SSM command accepting ReleaseTag, CommitSha and ArtifactSha256 only.",
+      "Value": {
+        "Ref": "DeployDocument"
+      }
+    },
+    "DeploymentRegion": {
+      "Description": "Region containing the existing managed node and deployment document.",
+      "Value": {
+        "Ref": "AWS::Region"
+      }
+    },
+    "TargetManagedNodeId": {
+      "Description": "Sole managed node to which the GitHub role may send the document.",
+      "Value": {
+        "Ref": "TargetManagedNodeId"
+      }
+    }
+  }
+}

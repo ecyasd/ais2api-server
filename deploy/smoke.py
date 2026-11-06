@@ -88,6 +88,7 @@ def run(binary):
             state = {"cookies": [{"name": name, "value": "synthetic-cookie", "domain": ".google.com", "path": "/", "expires": -1, "secure": True, "httpOnly": True, "sameSite": "Lax"} for name in ["__Secure-1PSID", "SAPISID", "__Secure-1PAPISID", "__Secure-3PAPISID"]], "origins": [], "aistudio2api": {"source": {"browser": "fixture", "email": "fixture@example.com"}}}
             imported = call("/api/accounts/import/state", 200, admin, {"data": json.dumps({"storage_state": state, "auth_user": 2, "locale": "en-GB", "timezone": "Europe/London"})})
             assert imported["verified_online"] is False and imported["account"]["enabled"] is False
+            assert imported["account"]["import_completeness"] == "full_state"
             assert imported["account"]["locale"] == "en-GB"
             passed.append("save_only_native_import_without_network")
             config["proxy_api_key"] = "rotated-synthetic-key"

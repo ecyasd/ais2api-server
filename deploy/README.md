@@ -20,6 +20,25 @@ must point at the reviewed server commit. Release publication does not change a
 running service. Upstream desktop workflows remain in source but are disabled in
 this fork. Windows/macOS desktop packages are outside this server release.
 
+`Promote fixed server release` is the controlled delivery entry point after
+acceptance. Dispatch it from `main` with the reviewed release tag. It uses the
+existing GitHub OIDC role and one-node SSM document; it requires no long-lived AWS
+key. Repository variables are `AWS_DEPLOY_ROLE_ARN`, `AWS_DEPLOY_REGION`,
+`AWS_DEPLOY_DOCUMENT` and `AWS_DEPLOY_NODE`. The delivery template reuses those
+existing resources and replaces the allowed repository identity with this fork.
+
+The root-owned `host_deploy.py` is installed separately as
+`/usr/local/sbin/ais2api-server-deploy`. It only accepts a tag, commit and archive
+checksum from the dedicated document, and verifies the fixed repository's current
+reviewed `main`, release provenance, image platform, health and independent auth.
+It stops the current service before starting the replacement. A failed upgrade
+switches the image back while retaining the latest account/config/statistics data.
+The stable Compose path is `/srv/ais2api-server/compose.server.yml`, its private
+image selection is `/etc/ais2api-server/image.env`, and the existing protected
+`aistudio-api.service` unit controls the new server. Its traffic start gate and
+the host traffic timer remain enabled. Release packages cannot overwrite the
+root updater, service unit, Compose policy or mutable data.
+
 Load the verified archive with `docker load`, then set `SERVER_IMAGE` to the exact
 tested tag/digest, `SERVER_DATA` to a dedicated persistent directory, and use
 `docker compose -f deploy/compose.server.yml up -d`. The management endpoint is

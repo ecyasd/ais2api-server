@@ -1,0 +1,78 @@
+name: Promote fixed server release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Reviewed fixed server release to promote
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: server-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Resolve fixed release
+        id: fixed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          tag = os.environ['RELEASE_TAG']
+          assert re.fullmatch(r'server-v[0-9][0-9A-Za-z.+-]{0,79}', tag)
+          repo = os.environ['GITHUB_REPOSITORY']
+          release = json.loads(subprocess.check_output(['gh','release','view',tag,'--repo',repo,'--json','targetCommitish,isDraft']))
+          commit = os.environ['GITHUB_SHA']
+          assert not release['isDraft'] and release['targetCommitish'] == commit
+          subprocess.run(['gh','release','download',tag,'--repo',repo,'--pattern','SHA256SUMS','--dir','fixed'],check=True)
+          sums = {line.split()[1].lstrip('*'):line.split()[0] for line in open('fixed/SHA256SUMS')}
+          checksum = sums['server-image.tar.gz']
+          assert re.fullmatch(r'[0-9a-f]{64}',checksum)
+          with open(os.environ['GITHUB_OUTPUT'],'a') as output:
+              output.write(f'commit={commit}\nchecksum={checksum}\n')
+          PY
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_DEPLOY_REGION }}
+      - name: Deliver through the existing private node
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          COMMIT: ${{ steps.fixed.outputs.commit }}
+          CHECKSUM: ${{ steps.fixed.outputs.checksum }}
+          DOCUMENT: ${{ vars.AWS_DEPLOY_DOCUMENT }}
+          NODE: ${{ vars.AWS_DEPLOY_NODE }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess, time
+          def aws(*args):
+              return json.loads(subprocess.check_output(['aws','ssm',*args,'--output','json']))
+          parameters={name:[os.environ[value]] for name,value in [('ReleaseTag','RELEASE_TAG'),('CommitSha','COMMIT'),('ArtifactSha256','CHECKSUM')]}
+          response=aws('send-command','--document-name',os.environ['DOCUMENT'],'--instance-ids',os.environ['NODE'],
+                       '--parameters',json.dumps(parameters),'--timeout-seconds','1800')
+          identifier=response['Command']['CommandId']
+          for _ in range(180):
+              time.sleep(10)
+              try:
+                  result=aws('get-command-invocation','--command-id',identifier,'--instance-id',os.environ['NODE'])
+              except subprocess.CalledProcessError:
+                  continue
+              if result['Status'] in ('Success','Failed','Cancelled','TimedOut'):
+                  print(json.dumps({'commandId':identifier,'status':result['Status']}))
+                  assert result['Status']=='Success'
+                  break
+          else:
+              raise TimeoutError('server delivery')
+          PY
