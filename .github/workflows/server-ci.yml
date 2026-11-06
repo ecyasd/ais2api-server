@@ -1,0 +1,89 @@
+name: Server CI
+
+on:
+  push:
+    branches: [main, 'feat/**', 'upgrade/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.22.0'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - working-directory: web
+        run: |
+          npm ci
+          npm run typecheck
+          npm run lint
+          npm run format:check
+          npm run build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: server-web
+          path: internal/webui/dist
+          retention-days: 7
+
+  linux:
+    needs: web
+    runs-on: ubuntu-24.04
+    env:
+      CGO_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: server-web
+          path: internal/webui/dist
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: ./.github/actions/static-libraries
+        with:
+          target: linux-amd64-gnu
+      - name: Upstream and server contracts
+        run: |
+          go test -mod=readonly -trimpath -vet=off ./cmd/... ./internal/...
+          go vet -mod=readonly -trimpath ./cmd/... ./internal/...
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - uses: ./.github/actions/static-libraries
+        with:
+          target: linux-amd64
+      - name: Build fixed server binary
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CC: zig cc -target x86_64-linux-musl
+          CXX: zig c++ -target x86_64-linux-musl
+        run: |
+          version="v0.3.1+server.${GITHUB_SHA:0:12}"
+          go build -mod=readonly -trimpath -tags netgo,osusergo -ldflags="-s -w -linkmode external -extldflags '-static -Wl,--strip-all -Wl,--gc-sections' -X github.com/Mag1cFall/AIStudio2API/internal/app.version=$version -X github.com/Mag1cFall/AIStudio2API/internal/app.managedBy=ais2api-server" -o dist/aistudio2api ./cmd/aistudio2api
+          sha256sum dist/aistudio2api > dist/SHA256SUMS
+      - name: Build server image
+        run: |
+          docker build --platform linux/amd64 -f deploy/Dockerfile.server -t ais2api-server:${GITHUB_SHA} .
+          docker save ais2api-server:${GITHUB_SHA} | gzip > dist/server-image.tar.gz
+      - uses: actions/upload-artifact@v7
+        with:
+          name: server-linux-amd64
+          path: dist/
+          retention-days: 14
