@@ -91,6 +91,27 @@ def run(binary):
             assert imported["account"]["import_completeness"] == "full_state"
             assert imported["account"]["locale"] == "en-GB"
             passed.append("save_only_native_import_without_network")
+            wrapped = json.dumps({"storage_state": state, "auth_user": 2, "locale": "en-GB", "timezone": "Europe/London"})
+            discovered = call("/api/accounts/import/cookies/discover", 200, admin, {"cookies": wrapped})
+            assert discovered["accounts"][0]["email"] == "fixture@example.com"
+            assert discovered["accounts"][0]["imported"] is True and discovered["accounts"][0]["auth_user"] == 2
+            call("/api/accounts/import/cookies", 400, admin, {"items": [{"cdp": "127.0.0.1:9222"}]})
+            second_state = json.loads(json.dumps(state))
+            second_state["aistudio2api"]["source"]["email"] = "second@example.com"
+            second_wrapped = json.dumps({"storage_state": second_state, "auth_user": 1})
+            batch = call("/api/accounts/import/cookies", 202, admin, {"items": [
+                {"email": "fixture@example.com", "cookies": wrapped, "auth_user": 2},
+                {"email": "second@example.com", "cookies": second_wrapped, "auth_user": 1},
+            ], "locale": "zh-CN", "timezone": "Asia/Hong_Kong"})
+            for _ in range(100):
+                task = next(item for item in call("/api/accounts/tasks", 200, admin)["tasks"] if item["id"] == batch["task"]["id"])
+                if task["state"] != "running":
+                    assert task["state"] == "done" and all(item["state"] == "done" for item in task["items"])
+                    break
+                time.sleep(0.05)
+            else:
+                raise TimeoutError("synthetic native cookie batch")
+            passed.append("native_cookie_identity_batch_and_browserless_boundary")
             config["proxy_api_key"] = "rotated-synthetic-key"
             call("/api/config", 200, admin, config, "PUT")
             call("/v1/models", 401, key)
@@ -110,7 +131,7 @@ def run(binary):
             assert json.loads((root / "auth/fixture@example.com/account.json").read_text())["auth_user"] == 2
             start()
             accounts = call("/api/accounts", 200, admin)["accounts"]
-            assert len(accounts) == 1 and not accounts[0]["enabled"]
+            assert len(accounts) == 2 and all(not account["enabled"] for account in accounts)
             call("/v1/models", 401, "rotated-synthetic-key")
             passed.append("restart_persistence_and_no_unused_databases")
         finally:

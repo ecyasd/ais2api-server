@@ -1,12 +1,10 @@
 """Root-owned fixed-repository updater. Mutable data is never restored with code."""
 import argparse
-import fcntl
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
-import shlex
 import shutil
 import subprocess
 import tempfile
@@ -53,13 +51,69 @@ def download(url, target, expected):
     os.replace(temporary, target)
 
 
-def read_env(path):
+def env_value(value):
+    if not value:
+        return ""
+    if value.startswith("'"):
+        if len(value) < 2 or not value.endswith("'"):
+            raise ValueError("invalid-single-quoted-env")
+        return value[1:-1]
+    if not value.startswith('"'):
+        return value.split(" #", 1)[0].strip()
+    if len(value) < 2 or not value.endswith('"'):
+        raise ValueError("invalid-double-quoted-env")
+    raw, output, index = value[1:-1], bytearray(), 0
+    escaped = {"a":7, "b":8, "f":12, "n":10, "r":13, "t":9, "v":11, "\\":92, '"':34}
+    while index < len(raw):
+        char = raw[index]
+        index += 1
+        if char != "\\":
+            if char in ('"', "\n", "\r"):
+                raise ValueError("invalid-env-string")
+            output.extend(char.encode("utf-8", errors="surrogateescape"))
+            continue
+        if index >= len(raw):
+            raise ValueError("invalid-env-escape")
+        char = raw[index]
+        index += 1
+        if char in escaped:
+            output.append(escaped[char])
+        elif char in ("x", "u", "U"):
+            size = {"x":2, "u":4, "U":8}[char]
+            digits = raw[index:index + size]
+            if len(digits) != size or not re.fullmatch(r"[0-9a-fA-F]+", digits):
+                raise ValueError("invalid-env-hex")
+            number = int(digits, 16)
+            index += size
+            if char == "x":
+                output.append(number)
+            else:
+                if number > 0x10ffff or 0xd800 <= number <= 0xdfff:
+                    raise ValueError("invalid-env-unicode")
+                output.extend(chr(number).encode("utf-8"))
+        elif char in "01234567":
+            digits = char + raw[index:index + 2]
+            if len(digits) != 3 or not re.fullmatch(r"[0-7]{3}", digits) or int(digits, 8) > 255:
+                raise ValueError("invalid-env-octal")
+            output.append(int(digits, 8))
+            index += 2
+        else:
+            raise ValueError("invalid-env-escape")
+    return output.decode("utf-8", errors="surrogateescape")
+
+
+def read_env(path, keys=None):
     result = {}
-    for line in path.read_text().splitlines():
-        if line.strip() and not line.lstrip().startswith("#") and "=" in line:
-            key, value = line.split("=", 1)
-            parts = shlex.split(value)
-            result[key] = parts[0] if len(parts) == 1 else value
+    for line in path.read_text(encoding="utf-8", errors="surrogateescape").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            raise ValueError("invalid-env-line")
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if keys is None or key in keys:
+            result[key] = env_value(value.strip())
     return result
 
 
@@ -78,13 +132,15 @@ def atomic_write(path, raw):
 
 
 def verify_health(port):
-    values = read_env(DATA / ".env")
+    values = read_env(DATA / ".env", {"ADMIN_USERNAME", "ADMIN_PASSWORD", "PROXY_API_KEY"})
     admin = values["ADMIN_PASSWORD"]
     keys = [key.strip() for key in values.get("PROXY_API_KEY", "").split(",") if key.strip()]
     origin = f"http://127.0.0.1:{port}"
 
-    def status(path, token=None):
-        headers = {"Authorization": "Bearer " + token} if token else {}
+    def status(path, token=None, cookie=None):
+        headers = {"Authorization": "Bearer " + token.encode("utf-8", errors="surrogateescape").decode("latin-1")} if token else {}
+        if cookie:
+            headers["Cookie"] = cookie
         try:
             with urlopen(Request(origin + path, headers=headers), timeout=5) as response:
                 return response.status
@@ -100,9 +156,14 @@ def verify_health(port):
         time.sleep(0.5)
     else:
         raise RuntimeError("health-timeout")
-    assert status("/api/accounts", admin) == 200
+    login = Request(origin + "/api/auth/login", method="POST", headers={"Content-Type":"application/json"},
+                    data=json.dumps({"username":values["ADMIN_USERNAME"],"password":admin}).encode())
+    with urlopen(login, timeout=5) as response:
+        session_cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+    assert status("/api/accounts", cookie=session_cookie) == 200
     assert status("/api/accounts") == 401
-    assert status("/v1/models", admin) == 401
+    if admin == admin.strip() and not any(char in admin for char in "\r\n"):
+        assert status("/v1/models", admin) == 401
     assert status("/v1/models") == 401
     if keys:
         assert status("/api/accounts", keys[0]) == 401
@@ -162,6 +223,7 @@ def deploy(arguments):
 
 
 if __name__ == "__main__":
+    import fcntl
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tag", required=True)
     parser.add_argument("--commit", required=True)

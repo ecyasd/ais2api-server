@@ -287,6 +287,14 @@ func (s *server) handleImportCookieAccounts(w http.ResponseWriter, r *http.Reque
 		writeAdminError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
+	if s.config.Product != nil && !s.config.Product.BrowserLogin {
+		for _, item := range input.Items {
+			if strings.TrimSpace(item.CDP) != "" {
+				writeAdminError(w, http.StatusBadRequest, "browser_import_disabled", "服务器版不读取云端浏览器，请粘贴 Cookie、选择文件或使用原电脑配对")
+				return
+			}
+		}
+	}
 	task := AccountTask{Kind: "cookies", Items: make([]AccountTaskItem, len(input.Items))}
 	for index, item := range input.Items {
 		task.Items[index] = AccountTaskItem{Label: item.Email, State: "pending"}
@@ -303,6 +311,20 @@ func (s *server) handleImportCookieAccounts(w http.ResponseWriter, r *http.Reque
 
 // importCookieAccount 读取调试浏览器的 Cookie 或解析 Cookie 文本，导入第 auth_user 个会话登录的账户
 func (s *server) importCookieAccount(ctx context.Context, item cookieImportItem, proxy string, locale string, timezone string) (AdminAccount, error) {
+	if s.config.Product != nil {
+		parsed, _, err := parseServerImport(serverImportInput{Data: item.Cookies, Label: item.Email, AuthUser: &item.AuthUser})
+		if err != nil {
+			return AdminAccount{}, err
+		}
+		parsed.Proxy = proxy
+		if parsed.Locale == "" {
+			parsed.Locale = locale
+		}
+		if parsed.Timezone == "" {
+			parsed.Timezone = timezone
+		}
+		return s.config.Admin.ImportAccountState(ctx, parsed)
+	}
 	cookies := item.Cookies
 	if address := strings.TrimSpace(item.CDP); address != "" {
 		browser, err := chromeauth.ReadCDPBrowser(ctx, address)

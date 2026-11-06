@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Mag1cFall/AIStudio2API/internal/aistudio"
@@ -337,7 +339,7 @@ type AdminEvent struct {
 
 func (s *server) registerAdmin(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/accounts", s.handleAccounts)
-	if s.config.Product != nil {
+	if s.config.Product != nil && s.config.Product.CookieImport {
 		mux.HandleFunc("POST /api/accounts/import/state", s.handleServerImport)
 	}
 	if s.config.Product == nil || s.config.Product.BrowserLogin {
@@ -345,6 +347,8 @@ func (s *server) registerAdmin(mux *http.ServeMux) {
 		mux.HandleFunc("GET /api/accounts/import/chrome", s.handleChromeImportProfiles)
 		mux.HandleFunc("POST /api/accounts/import/chrome", s.handleImportChromeAccounts)
 		mux.HandleFunc("GET /api/accounts/import/browsers", s.handleCookieBrowsers)
+	}
+	if s.config.Product == nil || s.config.Product.CookieImport {
 		mux.HandleFunc("POST /api/accounts/import/cookies/discover", s.handleDiscoverCookieAccounts)
 		mux.HandleFunc("POST /api/accounts/import/cookies", s.handleImportCookieAccounts)
 	}
@@ -429,6 +433,35 @@ func (s *server) handleDiscoverCookieAccounts(w http.ResponseWriter, r *http.Req
 	if err := decodeJSON(r, &input); err != nil {
 		writeAdminError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
+	}
+	if s.config.Product != nil {
+		parsed, _, err := parseServerImport(serverImportInput{Data: input.Cookies})
+		if err != nil {
+			writeAdminError(w, http.StatusBadRequest, "invalid_cookies", err.Error())
+			return
+		}
+		label := strings.TrimSpace(parsed.Label)
+		if extension, exists, extensionErr := parsed.StorageState.AuthExtension(); extensionErr == nil && exists && extension.Source.Email != "" {
+			label = extension.Source.Email
+		}
+		if label != "" {
+			existing, listErr := s.config.Admin.Accounts(r.Context())
+			if listErr != nil {
+				writeAdminUpstreamError(w, listErr)
+				return
+			}
+			candidate := CookieBrowser{Email: label, AuthUser: parsed.AuthUser, Locale: parsed.Locale, Timezone: parsed.Timezone}
+			for _, cookie := range parsed.StorageState.Cookies {
+				candidate.DeviceBound = candidate.DeviceBound || cookie.Name == "__Secure-1PSIDRTS"
+			}
+			for _, account := range existing {
+				candidate.Imported = candidate.Imported || strings.EqualFold(account.ID, label)
+			}
+			writeJSON(w, http.StatusOK, map[string][]CookieBrowser{"accounts": {candidate}})
+			return
+		}
+		normalized, _ := json.Marshal(parsed.StorageState.Cookies)
+		input.Cookies = string(normalized)
 	}
 	accounts, err := s.config.Admin.DiscoverCookieAccounts(r.Context(), input)
 	if err != nil {

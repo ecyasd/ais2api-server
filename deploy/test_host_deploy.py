@@ -8,6 +8,17 @@ import unittest
 from unittest.mock import patch
 
 
+class NativeEnvTests(unittest.TestCase):
+    def test_native_env_values_preserve_valid_credentials(self):
+        import host_deploy as deployer
+        with tempfile.TemporaryDirectory() as temporary:
+            file = Path(temporary) / ".env"
+            file.write_text(" ADMIN_PASSWORD = alpha\\beta # comment\nPROXY_API_KEY=key#literal\nADMIN_USERNAME = ' spaced value ' \nIGNORED=\"unclosed\n", encoding="utf-8")
+            values = deployer.read_env(file, {"ADMIN_PASSWORD", "PROXY_API_KEY", "ADMIN_USERNAME"})
+            self.assertEqual(values, {"ADMIN_PASSWORD": "alpha\\beta", "PROXY_API_KEY": "key#literal", "ADMIN_USERNAME": " spaced value "})
+            self.assertEqual(deployer.env_value(r'"quote\" line\n\a\v\x41\101\u4e2d\U0001f600"'), 'quote" line\n\a\vAA中😀')
+
+
 @unittest.skipUnless(os.name == "posix", "host updater is Linux-only")
 class HostDeliveryTests(unittest.TestCase):
     def test_failed_upgrade_rolls_back_only_image_and_keeps_latest_cookie(self):

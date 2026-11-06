@@ -42,12 +42,13 @@ root updater, service unit, Compose policy or mutable data.
 Load the verified archive with `docker load`, then set `SERVER_IMAGE` to the exact
 tested tag/digest, `SERVER_DATA` to a dedicated persistent directory, and use
 `docker compose -f deploy/compose.server.yml up -d`. The management endpoint is
-bound to loopback for the existing authenticated HTTPS gateway. A candidate uses
-a separate port and data directory; it does not replace a running installation.
+bound to loopback for the existing authenticated HTTPS gateway. Stop the currently
+running API before starting a candidate. Keep only one product service running;
+use a separate data directory for synthetic checks, then migrate before cutover.
 The Linux Compose deployment uses host networking with an explicit loopback bind,
 so starting or replacing the service does not create bridge/veth interfaces that
 invalidate host traffic accounting. Keep the host's existing traffic protection
-enabled. Verify the network policy before starting a candidate alongside a service.
+enabled. Verify the network policy before any candidate start or replacement.
 
 Place `.env` **inside the persistent data directory**, using `server.env.example`
 as a template. Supply separate administrator and model credentials. A missing
@@ -56,6 +57,11 @@ put mutable model keys in container environment variables, as environment values
 override the management page. `AUTO_START=false` preserves explicit owner control
 over account activation. Imported accounts are saved disabled, without network
 verification; enabling an account or starting generation is a separate operation.
+Cookie import uses AIS2's native account recognition, multiple file selection,
+account checkboxes and batch task list. Raw Cookie discovery contacts Google only
+after the owner supplies import data; it does not start a browser or call a model.
+Complete native exports keep their identity and environment metadata. Existing
+accounts can be selected to replace credentials without deleting the account.
 
 ## Data inventory and consistent recovery
 

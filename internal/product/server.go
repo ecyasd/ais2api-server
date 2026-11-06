@@ -18,6 +18,7 @@ type Profile struct {
 	Studio             bool     `json:"studio"`
 	DisabledPages      []string `json:"disabledPages"`
 	BrowserLogin       bool     `json:"browserLogin"`
+	CookieImport       bool     `json:"cookieImport"`
 	Preview            bool     `json:"preview"`
 	PromptStore        bool     `json:"promptStore"`
 	ExtraProtocols     bool     `json:"extraProtocols"`
