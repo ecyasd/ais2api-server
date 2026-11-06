@@ -6,15 +6,14 @@ import (
 	"fmt"
 )
 
-// supportedTools 丢弃模型不支持的函数声明与内置工具，声明的工具全部丢弃时一并清除工具选择，未知内置工具与不能同时使用的工具返回错误
+// supportedTools 拒绝不支持的客户端函数及强制工具约束，筛选可选内置工具。
 func supportedTools(tools Tools, model Model) (Tools, error) {
 	if tools.ToolConfig.Mode == "none" {
 		return tools, nil
 	}
 	declared := len(tools.Functions) > 0 || len(tools.Google) > 0 || tools.GoogleSearch != nil
 	if !model.Capabilities["function_declarations"] && len(tools.Functions) > 0 {
-		tools.Functions = nil
-		tools.ToolConfig.AllowedFunctionNames = nil
+		return Tools{}, fmt.Errorf("模型不支持声明的客户端函数工具")
 	}
 	if search := tools.GoogleSearch; search != nil {
 		filtered := *search
@@ -55,6 +54,9 @@ func supportedTools(tools Tools, model Model) (Tools, error) {
 		return Tools{}, fmt.Errorf("google_maps 不能与 code_execution 或 url_context 同时使用")
 	}
 	if declared && len(tools.Functions) == 0 && len(tools.Google) == 0 && tools.GoogleSearch == nil {
+		if tools.ToolConfig.Mode == "required" || tools.ToolConfig.Mode == "validated" || len(tools.ToolConfig.AllowedFunctionNames) > 0 {
+			return Tools{}, fmt.Errorf("模型不支持指定的工具约束")
+		}
 		tools.ToolConfig = ToolConfig{}
 	}
 	return tools, nil

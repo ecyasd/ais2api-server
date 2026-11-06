@@ -190,7 +190,7 @@ function latencyWidth(milliseconds: number): number {
         <h3 :id="`${id}-title`" class="text-sm font-medium text-gray-200">
           {{ t('usage.records') }}
         </h3>
-        <p v-if="!filtered" class="text-xs text-gray-500">
+        <p v-if="!filtered && total >= 0" class="text-xs text-gray-500">
           {{
             t(total === 1 ? 'usage.recordsCountOne' : 'usage.recordsCount').replace(
               '{count}',

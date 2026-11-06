@@ -260,7 +260,36 @@ func assistantToolPrompt(request GenerateRequest, start int, transcribed bool) (
 		prompt += "\n\n"
 	}
 	request.System = append([]string{prompt}, request.System...)
+	// A reused app has seen the original calls, but may not have seen the IDs
+	// assigned by this server. Send their compact ID/name/arguments mapping with
+	// the new results, including parallel calls to the same function.
+	var mapping []assistantCall
+	if start > 0 {
+		results := map[string]bool{}
+		for _, content := range request.Contents[start:] {
+			for _, part := range content.Parts {
+				if part.FunctionResult != nil {
+					results[part.FunctionResult.ID] = true
+				}
+			}
+		}
+		for _, content := range request.Contents[:start] {
+			for _, part := range content.Parts {
+				if call := part.FunctionCall; call != nil && results[call.ID] {
+					mapping = append(mapping, assistantCall{ID: call.ID, Name: call.Name, Arguments: transcriptJSON(call.Arguments)})
+				}
+			}
+		}
+	}
 	request.Contents = contents[start:]
+	if len(mapping) > 0 {
+		encoded, err := scriptJSON(mapping)
+		if err != nil {
+			return request, err
+		}
+		reference := "Reference for your previous calls only; do not execute these again. Match the following function_results by id.\n" + assistantCallFence + "\n" + encoded + "\n```"
+		request.Contents = append([]Content{{Role: RoleUser, Parts: []Part{{Text: reference}}}}, request.Contents...)
+	}
 	return request, nil
 }
 
@@ -289,6 +318,13 @@ func scriptJSON(value any) (string, error) {
 
 // sendAssistant 在对话所在的应用中只提交新增轮次，没有可继续的应用时新建应用并提交全部历史，返回任务流；本轮结束时没有正文与函数调用的，在同一应用中追加用户轮请模型继续，用量按续写合并；流关闭后取消未完成的任务，本轮回复完整结束时对话保存为可继续，否则放弃应用留待巡检删除
 func (c *Client) sendAssistant(ctx context.Context, request GenerateRequest, entry modelEntry) (*RPCResponse, func(io.Reader, func(Event) error) error, error) {
+	endAssistantRound := telemetry.RoundStarted(ctx)
+	opened := false
+	defer func() {
+		if !opened {
+			endAssistantRound(false)
+		}
+	}()
 	submitted := telemetry.Start(ctx, telemetry.Submit)
 	defer submitted()
 	reason := ""
@@ -341,6 +377,7 @@ func (c *Client) sendAssistant(ctx context.Context, request GenerateRequest, ent
 		return nil, nil, err
 	}
 	stream.Body = &assistantStreamBody{ReadCloser: stream.Body, cleanup: cleanup}
+	opened = true
 	return stream, func(source io.Reader, emit func(Event) error) error {
 		newDecoder := func(streamBody []byte) *AssistantStreamDecoder {
 			return &AssistantStreamDecoder{Functions: functions, Reopen: func() (io.ReadCloser, error) {
@@ -372,16 +409,20 @@ func (c *Client) sendAssistant(ctx context.Context, request GenerateRequest, ent
 		}
 		decoder := newDecoder(streamBody)
 		err := DecodeAssistantStream(source, decoder, collect)
+		endAssistantRound(err == nil && len(reply) > 0 && !decoder.malformed)
 		for followed := 0; err == nil && len(reply) == 0 && !decoder.overran && !decoder.malformed && followed < regenerations; followed++ {
 			followUp := request
 			followUp.Contents = []Content{{Role: RoleUser, Parts: []Part{{Text: assistantEmptyReplyPrompt}}}}
+			endFollowup := telemetry.RoundStarted(ctx)
 			next, nextBody, follow, openErr := c.openAssistantGeneration(ctx, followUp, entry, applet, true)
 			cleanup.generation.Store(&next)
 			if err = openErr; err != nil {
+				endFollowup(false)
 				break
 			}
 			decoder = newDecoder(nextBody)
 			err = errors.Join(DecodeAssistantStream(follow.Body, decoder, collect), follow.Body.Close())
+			endFollowup(err == nil && len(reply) > 0 && !decoder.malformed)
 		}
 		if err == nil {
 			cleanup.completed.Store(!decoder.overran)
@@ -1014,7 +1055,11 @@ func assistantCalls(body string, anyName bool, functions []string) ([]Event, boo
 		if isJSONNull(arguments) {
 			arguments = json.RawMessage(`{}`)
 		}
-		events = append(events, Event{Kind: EventToolCall, FunctionCall: &FunctionCall{ID: uuid.NewString(), Name: call.Name, Arguments: arguments}})
+		id := call.ID
+		if id == "" {
+			id = uuid.NewString()
+		}
+		events = append(events, Event{Kind: EventToolCall, FunctionCall: &FunctionCall{ID: id, Name: call.Name, Arguments: arguments}})
 	}
 	return events, true
 }

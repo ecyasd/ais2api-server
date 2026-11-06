@@ -27,6 +27,7 @@ type toolContract struct {
 func prepareToolRequest(request GenerateRequest) (GenerateRequest, *toolContract, error) {
 	config := request.Tools.ToolConfig
 	if config.Mode == "none" {
+		request.Tools = Tools{ToolConfig: ToolConfig{Mode: "none"}}
 		return request, &toolContract{names: map[string]bool{}}, nil
 	}
 	if search := request.Tools.GoogleSearch; search != nil {

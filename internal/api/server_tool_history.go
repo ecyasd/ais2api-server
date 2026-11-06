@@ -10,6 +10,9 @@ import (
 func validateChatToolHistory(messages []chatMessage) error {
 	pending := map[string]string{}
 	for _, message := range messages {
+		if message.Role != "tool" && len(pending) > 0 {
+			return fmt.Errorf("继续对话前必须回传全部工具结果")
+		}
 		for _, call := range message.ToolCalls {
 			if call.Type != "function" {
 				return fmt.Errorf("服务器版仅支持标准 function 工具")
@@ -30,6 +33,9 @@ func validateChatToolHistory(messages []chatMessage) error {
 			}
 			delete(pending, message.ToolCallID)
 		}
+	}
+	if len(pending) > 0 {
+		return fmt.Errorf("缺少工具调用结果")
 	}
 	return nil
 }

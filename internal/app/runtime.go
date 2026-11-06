@@ -1593,6 +1593,7 @@ type upstreamActivity struct {
 }
 
 type requestPreparationTiming struct {
+	record         func(aistudio.RequestPhase, time.Duration)
 	mu             sync.Mutex
 	phase          aistudio.RequestPhase
 	phaseStarted   time.Time
@@ -1640,6 +1641,9 @@ func (timing *requestPreparationTiming) snapshot(now time.Time) (string, time.Du
 
 func (timing *requestPreparationTiming) finishPhaseLocked(now time.Time) {
 	elapsed := now.Sub(timing.phaseStarted)
+	if timing.record != nil {
+		timing.record(timing.phase, elapsed)
+	}
 	switch timing.phase {
 	case aistudio.RequestPhasePreparingWAA:
 		timing.waa += elapsed
@@ -2119,6 +2123,14 @@ func (service *trackedService) runAttempt(
 	}
 	prepareStartedAt := time.Now()
 	prepareTiming := newRequestPreparationTiming(prepareStartedAt)
+	prepareTiming.record = func(phase aistudio.RequestPhase, duration time.Duration) {
+		switch phase {
+		case aistudio.RequestPhasePreparingWAA:
+			telemetry.Add(ctx, telemetry.Signing, duration)
+		case aistudio.RequestPhaseSendingUpstream:
+			telemetry.Add(ctx, telemetry.Upstream, duration)
+		}
+	}
 	prepareWait := startWaitReporter(func(waited time.Duration) {
 		current, _, _ := prepareTiming.snapshot(time.Now())
 		service.requests.logRequestProgress(request.ID, accountLabel, "WARN", fmt.Sprintf(
@@ -2141,9 +2153,6 @@ func (service *trackedService) runAttempt(
 		))
 	}
 	prepareElapsed := time.Since(prepareStartedAt)
-	_, signing, headers := prepareTiming.snapshot(time.Now())
-	telemetry.Add(ctx, telemetry.Signing, signing)
-	telemetry.Add(ctx, telemetry.Upstream, headers)
 	if prepareWait.finish() {
 		_, waa, responseHeader := prepareTiming.snapshot(time.Now())
 		service.requests.logRequestProgress(request.ID, accountLabel, "INFO", fmt.Sprintf(

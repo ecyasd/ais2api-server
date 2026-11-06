@@ -98,7 +98,7 @@ function recentQuery(): URLSearchParams {
         v-model:search="search"
         :scope="scope"
         :base-query="recentQuery"
-        :total="0"
+        :total="-1"
         :status-options="['200', '400', '401', '429', '499', '500', '502', '503']"
         :refresh-key="refreshKey"
       />

@@ -143,6 +143,30 @@ func TestCorruptAccountDoesNotRemoveHealthyAccount(t *testing.T) {
 	if raw, _ := os.ReadFile(broken); string(raw) != "corrupt" {
 		t.Fatal("isolation modified source file")
 	}
+	recovered, lease, err := store.Create(DefaultAccountConfig("broken@example.com"), StorageState{Cookies: []StateCookie{{Name: "SID", Value: "new-synthetic", Domain: ".google.com", Path: "/", Expires: -1}}})
+	if err != nil {
+		t.Fatal("explicit import could not recover isolated account", err)
+	}
+	if err := lease.Release(); err != nil {
+		t.Fatal(err)
+	}
+	if recovered.ID != "broken@example.com" {
+		t.Fatal("recovery changed account identity")
+	}
+	preserved, err := filepath.Glob(filepath.Join(root, ".quarantine", "*", "storage-state.json"))
+	if err != nil || len(preserved) != 1 {
+		t.Fatal("corrupt original not retained", err)
+	}
+}
+
+func TestNoneDisablesAllToolsAndUnsupportedRequiredFails(t *testing.T) {
+	request, _, err := prepareToolRequest(GenerateRequest{Tools: Tools{Functions: []FunctionDeclaration{{Name: "f"}}, GoogleSearch: &GoogleSearchOptions{}, ToolConfig: ToolConfig{Mode: "none"}}})
+	if err != nil || len(request.Tools.Functions) > 0 || request.Tools.GoogleSearch != nil {
+		t.Fatal("none retained a tool allowance", err)
+	}
+	if _, err := supportedTools(Tools{Functions: []FunctionDeclaration{{Name: "f"}}, ToolConfig: ToolConfig{Mode: "required"}}, Model{}); err == nil {
+		t.Fatal("required function silently dropped")
+	}
 }
 
 func TestAssistantStreamsBodyAndPreservesToolResultIDs(t *testing.T) {
@@ -162,6 +186,14 @@ func TestAssistantStreamsBodyAndPreservesToolResultIDs(t *testing.T) {
 	raw, _ := json.Marshal(transcribed.Contents)
 	if !strings.Contains(string(raw), `\"id\":\"b\"`) {
 		t.Fatal("Build transcript lost call IDs")
+	}
+	reused, err := assistantToolPrompt(request, 1, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reference := reused.Contents[0].Parts[0].Text
+	if !strings.Contains(reference, `"id":"b","name":"lookup","arguments":{"n":2}`) || !strings.Contains(reference, "Reference for your previous calls") {
+		t.Fatal("reused Build session lost ID to argument mapping")
 	}
 	level, err := assistantThinkingLevel(GenerationConfig{ReasoningEffort: "low"}, GenerationDefaults{ThinkingLevels: []int64{1, 2, 3}})
 	if err != nil || level != 1 {

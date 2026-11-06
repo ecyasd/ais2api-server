@@ -1,3 +1,8 @@
+> **AIS2 API Server**：本 Fork 是独立的酒馆优先服务器项目，固定基于 AIS2 v0.3.1。
+> 使用无浏览器 Go 请求链路，保留账号管理、PG/Build 助手、工具调用、统计、请求和日志。
+> 服务器入口及发布、迁移和验收说明见 [deploy/README.md](deploy/README.md)。
+> 下方保留上游文档；桌面、多媒体试用页面与额外协议不属于此服务器版本的产品范围。
+
 <div align="center">
 
 # AI Studio to OpenAI, Anthropic & Gemini Compatible API

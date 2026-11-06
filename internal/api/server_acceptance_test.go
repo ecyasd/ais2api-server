@@ -85,6 +85,10 @@ func TestServerOpenAIToolRoundTripBothModelRoutes(t *testing.T) {
 			if invalid.Code != 400 {
 				t.Fatal("mismatched result accepted", invalid.Code)
 			}
+			missing := post(`{"model":"` + model + `","messages":[` + string(assistant) + `]}`)
+			if missing.Code != 400 {
+				t.Fatal("missing tool result accepted", missing.Code)
+			}
 		})
 	}
 }

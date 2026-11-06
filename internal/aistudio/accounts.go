@@ -590,7 +590,27 @@ func (s *AccountStore) Create(accountConfig AccountConfig, state StorageState) (
 	if err != nil {
 		return nil, nil, err
 	}
+	// Server stores retain broken directories for inspection. An explicit import
+	// may recover that ID, preserving the original files in a private quarantine.
+	quarantined := ""
+	if s.OnLoadError != nil {
+		if _, statErr := os.Stat(directory); statErr == nil {
+			if _, loadErr := loadAccount(directory); loadErr != nil {
+				quarantineRoot := filepath.Join(root, ".quarantine")
+				if err := os.MkdirAll(quarantineRoot, 0700); err != nil {
+					return nil, nil, errors.Join(err, publishLease.Release())
+				}
+				quarantined = filepath.Join(quarantineRoot, id+"-"+fmt.Sprint(time.Now().UnixNano()))
+				if err := os.Rename(directory, quarantined); err != nil {
+					return nil, nil, errors.Join(err, publishLease.Release())
+				}
+			}
+		}
+	}
 	if err := os.Rename(temporary, directory); err != nil {
+		if quarantined != "" {
+			err = errors.Join(err, os.Rename(quarantined, directory))
+		}
 		return nil, nil, errors.Join(fmt.Errorf("保存账户目录: %w", err), publishLease.Release())
 	}
 	if err := validatePersistentAccountFiles(account); err != nil {
