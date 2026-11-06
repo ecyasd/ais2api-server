@@ -20,15 +20,38 @@ must point at the reviewed server commit. Release publication does not change a
 running service. Upstream desktop workflows remain in source but are disabled in
 this fork. Windows/macOS desktop packages are outside this server release.
 
+`Promote fixed server release` is the controlled delivery entry point after
+acceptance. Dispatch it from `main` with the reviewed release tag. It uses the
+existing GitHub OIDC role and one-node SSM document; it requires no long-lived AWS
+key. Repository variables are `AWS_DEPLOY_ROLE_ARN`, `AWS_DEPLOY_REGION`,
+`AWS_DEPLOY_DOCUMENT` and `AWS_DEPLOY_NODE`. The delivery template reuses those
+existing resources and replaces the allowed repository identity with this fork.
+
+The root-owned `host_deploy.py` is installed separately as
+`/usr/local/sbin/ais2api-server-deploy`. It only accepts a tag, commit and archive
+checksum from the dedicated document, and verifies the fixed repository's current
+reviewed `main`, release provenance, image platform, health and independent auth.
+It stops the current service before starting the replacement. A failed upgrade
+switches the image back while retaining the latest account/config/statistics data.
+The stable Compose path is `/srv/ais2api-server/compose.server.yml`, its private
+image selection is `/etc/ais2api-server/image.env`, and the existing protected
+`aistudio-api.service` unit controls the new server. Its traffic start gate and
+the host traffic timer remain enabled. Release packages cannot overwrite the
+root updater, service unit, Compose policy or mutable data.
+Before changing the existing stack's repository trust, retire any legacy updater
+entry points referenced by retained SSM document versions. Historical versions
+must not provide a path back to the old product or repository.
+
 Load the verified archive with `docker load`, then set `SERVER_IMAGE` to the exact
 tested tag/digest, `SERVER_DATA` to a dedicated persistent directory, and use
 `docker compose -f deploy/compose.server.yml up -d`. The management endpoint is
-bound to loopback for the existing authenticated HTTPS gateway. A candidate uses
-a separate port and data directory; it does not replace a running installation.
+bound to loopback for the existing authenticated HTTPS gateway. Stop the currently
+running API before starting a candidate. Keep only one product service running;
+use a separate data directory for synthetic checks, then migrate before cutover.
 The Linux Compose deployment uses host networking with an explicit loopback bind,
 so starting or replacing the service does not create bridge/veth interfaces that
 invalidate host traffic accounting. Keep the host's existing traffic protection
-enabled. Verify the network policy before starting a candidate alongside a service.
+enabled. Verify the network policy before any candidate start or replacement.
 
 Place `.env` **inside the persistent data directory**, using `server.env.example`
 as a template. Supply separate administrator and model credentials. A missing
@@ -37,6 +60,11 @@ put mutable model keys in container environment variables, as environment values
 override the management page. `AUTO_START=false` preserves explicit owner control
 over account activation. Imported accounts are saved disabled, without network
 verification; enabling an account or starting generation is a separate operation.
+Cookie import uses AIS2's native account recognition, multiple file selection,
+account checkboxes and batch task list. Raw Cookie discovery contacts Google only
+after the owner supplies import data; it does not start a browser or call a model.
+Complete native exports keep their identity and environment metadata. Existing
+accounts can be selected to replace credentials without deleting the account.
 
 ## Data inventory and consistent recovery
 

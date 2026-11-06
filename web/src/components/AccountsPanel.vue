@@ -35,7 +35,6 @@ import UiIcon from './UiIcon.vue'
 import UiPager from './UiPager.vue'
 import UiSelect from './UiSelect.vue'
 import { product } from '@/product'
-import ServerImportDialog from './ServerImportDialog.vue'
 
 // CookieCandidate 是 Cookie 中识别出的账户，source 为所在 Cookie 来源的序号
 type CookieCandidate = CookieBrowser & { source: number }
@@ -62,7 +61,6 @@ const showEditor = ref(false)
 const showBrowserLogin = ref(false)
 const showChromeImport = ref(false)
 const showCookieImport = ref(false)
-const showServerImport = ref(false)
 const cookieText = ref('')
 // cookieFiles 是粘贴 Cookie 对话框中选择的 Cookie 文件，选择后代替粘贴的文本，每个文件单独识别与导入
 const cookieFiles = ref<{ name: string; text: string }[]>([])
@@ -542,11 +540,16 @@ async function discoverCookieAccounts(): Promise<void> {
     const found: CookieCandidate[] = []
     for (const [source, item] of sources.entries()) {
       failed = item.name
-      const discovered = await api.discoverCookieAccounts({
-        cookies: item.text,
-        proxy: accountEnvironment.proxy,
-      })
-      found.push(...discovered.map((candidate) => ({ ...candidate, source })))
+      try {
+        const discovered = await api.discoverCookieAccounts({
+          cookies: item.text,
+          proxy: accountEnvironment.proxy,
+        })
+        found.push(...discovered.map((candidate) => ({ ...candidate, source })))
+      } catch (error) {
+        if (sequence === cookieDiscovery)
+          cookieDiscoveryError.value += `${item.name ? `${item.name}: ` : ''}${errorText(error)}\n`
+      }
     }
     if (sequence !== cookieDiscovery) return
     cookieCandidates.value = found
@@ -567,7 +570,7 @@ function cookieKey(candidate: CookieCandidate): string {
 
 // importableCookieUsers 是 Cookie 中尚未导入的账户
 const importableCookieUsers = computed(() =>
-  cookieCandidates.value.filter((item) => !item.imported).map(cookieKey),
+  cookieCandidates.value.filter((item) => product.cookieImport || !item.imported).map(cookieKey),
 )
 
 const allCookieCandidatesSelected = computed(
@@ -692,10 +695,7 @@ const addMethods = computed<
     label: 'accounts.pasteCookie',
     help: 'accounts.pasteCookieHelp',
     icon: 'cookie',
-    action: () => {
-      if (product.browserLogin) showCookieImport.value = true
-      else showServerImport.value = true
-    },
+    action: () => (showCookieImport.value = true),
   },
   {
     label: 'accounts.readBrowser',
@@ -860,11 +860,6 @@ async function refreshAllAccounts(): Promise<void> {
   <section
     class="flex min-h-0 flex-1 flex-col overflow-auto max-md:[scrollbar-gutter:stable] md:overflow-hidden"
   >
-    <ServerImportDialog
-      v-if="showServerImport"
-      @close="showServerImport = false"
-      @saved="emit('refresh')"
-    />
     <header
       class="flex flex-wrap items-center gap-3 border-b border-line px-4 py-4 md:px-[max(2rem,calc((100%_-_var(--container-6xl))/2_+_2rem))]"
     >
@@ -1614,7 +1609,9 @@ async function refreshAllAccounts(): Promise<void> {
                     :key="cookieKey(candidate)"
                     class="flex items-center gap-3 rounded border border-line bg-canvas p-3 transition"
                     :class="
-                      candidate.imported ? 'opacity-60' : 'cursor-pointer hover:border-gray-600'
+                      candidate.imported && !product.cookieImport
+                        ? 'opacity-60'
+                        : 'cursor-pointer hover:border-gray-600'
                     "
                   >
                     <input
@@ -1622,7 +1619,7 @@ async function refreshAllAccounts(): Promise<void> {
                       class="h-4 w-4 shrink-0 accent-blue-600"
                       type="checkbox"
                       :value="cookieKey(candidate)"
-                      :disabled="candidate.imported"
+                      :disabled="candidate.imported && !product.cookieImport"
                     />
                     <span class="min-w-0 flex-1">
                       <strong
@@ -1643,7 +1640,7 @@ async function refreshAllAccounts(): Promise<void> {
                       >
                     </span>
                     <span v-if="candidate.imported" class="shrink-0 text-xs text-gray-400">{{
-                      t('accounts.alreadyImported')
+                      product.cookieImport ? t('common.relogin') : t('accounts.alreadyImported')
                     }}</span>
                   </label>
                 </div>

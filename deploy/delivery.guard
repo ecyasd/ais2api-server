@@ -1,0 +1,25 @@
+rule existing_infrastructure_only {
+    Resources.*.Type IN ['AWS::IAM::Role', 'AWS::SSM::Document']
+}
+
+rule exact_github_identity {
+    Resources.GitHubDeployRole.Properties.MaxSessionDuration <= 3600
+    Resources.GitHubDeployRole.Properties.AssumeRolePolicyDocument.Statement.* {
+        Action == 'sts:AssumeRoleWithWebIdentity'
+        Condition.StringEquals.'token.actions.githubusercontent.com:aud' == 'sts.amazonaws.com'
+        Condition.StringEquals.'token.actions.githubusercontent.com:sub'.'Fn::Sub' == 'repo:${GitHubOwnerName}@${GitHubOwnerId}/${GitHubRepositoryName}@${GitHubRepositoryId}:ref:refs/heads/${DeploymentBranch}'
+    }
+}
+
+rule narrow_deployment_actions {
+    Resources.GitHubDeployRole.Properties.Policies.*.PolicyDocument.Statement.*.Action IN ['ssm:SendCommand', 'ssm:GetCommandInvocation']
+    Resources.GitHubDeployRole.Properties.Policies[0].PolicyDocument.Statement[0].Resource[0].'Fn::Sub' == 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:document/${DeployDocument}'
+    Resources.GitHubDeployRole.Properties.Policies[0].PolicyDocument.Statement[0].Resource[1].'Fn::Sub' == 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:managed-instance/${TargetManagedNodeId}'
+}
+
+rule constrained_command_parameters {
+    Resources.DeployDocument.Properties.Content.parameters.*.interpolationType == 'ENV_VAR'
+    Resources.DeployDocument.Properties.Content.parameters.CommitSha.allowedPattern == '^[0-9a-f]{40}$'
+    Resources.DeployDocument.Properties.Content.parameters.ArtifactSha256.allowedPattern == '^[0-9a-f]{64}$'
+    Resources.DeployDocument.Properties.Content.parameters.ReleaseTag.allowedPattern == '^server-v[0-9][0-9A-Za-z.+-]{0,79}$'
+}

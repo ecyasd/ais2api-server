@@ -446,7 +446,7 @@ func (admin *runtimeAdmin) ImportAccountState(ctx context.Context, input api.Acc
 		}
 	}
 	admin.requests.log("auth", "INFO", "认证状态账户已导入 | 账户="+account.Label)
-	return account, nil
+	return admin.account(account.ID)
 }
 
 func (admin *runtimeAdmin) addAccount(

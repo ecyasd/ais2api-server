@@ -18,6 +18,22 @@ env:
   GOTOOLCHAIN: local
 
 jobs:
+  delivery:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate scoped delivery template
+        run: |
+          python3 -m venv "$RUNNER_TEMP/cfn-lint"
+          "$RUNNER_TEMP/cfn-lint/bin/pip" install cfn-lint==1.59.0
+          "$RUNNER_TEMP/cfn-lint/bin/cfn-lint" --regions ap-northeast-1 --template deploy/github-oidc-stack.json
+          curl --fail --location --retry 2 -o "$RUNNER_TEMP/guard.tar.gz" https://github.com/aws-cloudformation/cloudformation-guard/releases/download/3.2.1/cfn-guard-v3-x86_64-linux-latest.tar.gz
+          echo "8c66efb19c63e6c2bf26b9a41bbcf2f85baa8a937b01d350940194faaf64cf1d  $RUNNER_TEMP/guard.tar.gz" | sha256sum -c -
+          mkdir "$RUNNER_TEMP/guard"
+          tar -xzf "$RUNNER_TEMP/guard.tar.gz" -C "$RUNNER_TEMP/guard"
+          guard="$(find "$RUNNER_TEMP/guard" -type f -name cfn-guard -print -quit)"
+          "$guard" validate --data deploy/github-oidc-stack.json --rules deploy/delivery.guard --output-format json
+
   web:
     runs-on: ubuntu-24.04
     steps:
