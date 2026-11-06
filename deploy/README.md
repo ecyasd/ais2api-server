@@ -25,6 +25,10 @@ tested tag/digest, `SERVER_DATA` to a dedicated persistent directory, and use
 `docker compose -f deploy/compose.server.yml up -d`. The management endpoint is
 bound to loopback for the existing authenticated HTTPS gateway. A candidate uses
 a separate port and data directory; it does not replace a running installation.
+The Linux Compose deployment uses host networking with an explicit loopback bind,
+so starting or replacing the service does not create bridge/veth interfaces that
+invalidate host traffic accounting. Keep the host's existing traffic protection
+enabled. Verify the network policy before starting a candidate alongside a service.
 
 Place `.env` **inside the persistent data directory**, using `server.env.example`
 as a template. Supply separate administrator and model credentials. A missing

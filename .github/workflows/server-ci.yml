@@ -85,6 +85,7 @@ jobs:
       - name: Build server image
         run: |
           docker build --platform linux/amd64 -f deploy/Dockerfile.server -t ais2api-server:${GITHUB_SHA} .
+          SERVER_IMAGE=ais2api-server:${GITHUB_SHA} SERVER_DATA=${RUNNER_TEMP}/server-data docker compose -f deploy/compose.server.yml config --quiet
           docker save ais2api-server:${GITHUB_SHA} | gzip > dist/server-image.tar.gz
       - uses: actions/upload-artifact@v7
         with:

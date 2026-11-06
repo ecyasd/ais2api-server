@@ -4,8 +4,9 @@ services:
     platform: linux/amd64
     init: true
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:${SERVER_PORT:-2049}:2048"
+    network_mode: host
+    environment:
+      LISTEN_ADDR: "127.0.0.1:${SERVER_PORT:-2049}"
     volumes:
       - "${SERVER_DATA:?Set a dedicated persistent directory}:/data"
     mem_limit: 1g
