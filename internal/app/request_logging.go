@@ -22,6 +22,10 @@ func requestLogData(entry api.AccessLog) *api.RequestLog {
 		QueueMS: float64(entry.QueueWait) / float64(time.Millisecond), ProofMS: float64(entry.Proof) / float64(time.Millisecond),
 		Channel: entry.Channel,
 	}
+	if entry.Trace != nil {
+		timing := entry.Trace.Snapshot()
+		data.Timing = &timing
+	}
 	if entry.Generation {
 		data.Parameters = map[string]string{
 			"temperature": entry.Temperature, "top_p": entry.TopP,
@@ -78,6 +82,14 @@ func finishedRequestLog(entry api.AccessLog) (*api.RequestLog, string, string) {
 
 // RecordAccessLog 保存请求结果日志
 func (admin *runtimeAdmin) RecordAccessLog(entry api.AccessLog) {
+	if entry.Generation && entry.Status < 400 && !entry.Canceled && entry.Error == "" {
+		if account, err := admin.pool.Account(entry.Account); err == nil {
+			now := time.Now().UTC()
+			if err := updateServerAccountMetadata(account.Directory, func(meta *serverAccountMetadata) { meta.LastSuccess = &now }); err != nil {
+				admin.requests.log("auth", "WARN", "账户元数据写入失败")
+			}
+		}
+	}
 	data, level, message := finishedRequestLog(entry)
 	admin.recordRequestLog(entry.Account, level, "request.finished", message, data)
 }

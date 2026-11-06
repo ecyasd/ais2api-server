@@ -93,7 +93,7 @@ func TestOpenAIToolMessageNameInference(t *testing.T) {
 			},
 			{
 				Role:       "tool",
-				ToolCallID: "call_mismatched_xyz",
+				ToolCallID: "call_abc_1",
 				Content:    json.RawMessage(`"ok"`),
 			},
 		},
@@ -114,7 +114,7 @@ func TestOpenAIToolMessageNameInference(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := root[1].([]any)[1].([]any)[0].([]any)[0].([]any)[11].([]any)
-	if result[0] != "query_image_presets" || result[2] != "call_mismatched_xyz" {
+	if result[0] != "query_image_presets" || result[2] != "call_abc_1" {
 		t.Fatalf("unexpected function result: %#v", result)
 	}
 }

@@ -380,6 +380,9 @@ type AccountCandidateState struct {
 // AccountStore 从一个或多个账户文件或目录加载账户
 type AccountStore struct {
 	paths []string
+	// OnLoadError isolates unreadable accounts without changing their files.
+	// A nil callback preserves upstream's fail-fast behavior for other callers.
+	OnLoadError func(accountID string)
 }
 
 // AccountPool 在账户之间执行能力与并发槽位调度
@@ -518,6 +521,10 @@ func (s *AccountStore) Load() ([]*Account, error) {
 	for _, directory := range directories {
 		account, err := loadAccount(directory)
 		if err != nil {
+			if s.OnLoadError != nil {
+				s.OnLoadError(filepath.Base(directory))
+				continue
+			}
 			return nil, err
 		}
 		if _, exists := ids[account.ID]; exists {
@@ -583,7 +590,27 @@ func (s *AccountStore) Create(accountConfig AccountConfig, state StorageState) (
 	if err != nil {
 		return nil, nil, err
 	}
+	// Server stores retain broken directories for inspection. An explicit import
+	// may recover that ID, preserving the original files in a private quarantine.
+	quarantined := ""
+	if s.OnLoadError != nil {
+		if _, statErr := os.Stat(directory); statErr == nil {
+			if _, loadErr := loadAccount(directory); loadErr != nil {
+				quarantineRoot := filepath.Join(root, ".quarantine")
+				if err := os.MkdirAll(quarantineRoot, 0700); err != nil {
+					return nil, nil, errors.Join(err, publishLease.Release())
+				}
+				quarantined = filepath.Join(quarantineRoot, id+"-"+fmt.Sprint(time.Now().UnixNano()))
+				if err := os.Rename(directory, quarantined); err != nil {
+					return nil, nil, errors.Join(err, publishLease.Release())
+				}
+			}
+		}
+	}
 	if err := os.Rename(temporary, directory); err != nil {
+		if quarantined != "" {
+			err = errors.Join(err, os.Rename(quarantined, directory))
+		}
 		return nil, nil, errors.Join(fmt.Errorf("保存账户目录: %w", err), publishLease.Release())
 	}
 	if err := validatePersistentAccountFiles(account); err != nil {
@@ -1523,6 +1550,9 @@ func (l *AccountLease) SaveStorageState(state StorageState) error {
 	}
 	l.account.storageMu.Lock()
 	defer l.account.storageMu.Unlock()
+	if l.staleAuthentication() {
+		return nil
+	}
 	if err := WriteStorageState(l.account.StoragePath, state); err != nil {
 		return err
 	}
@@ -1705,6 +1735,9 @@ func (l *AccountLease) ReplaceCookies(cookies []StateCookie) error {
 	}
 	l.account.storageMu.Lock()
 	defer l.account.storageMu.Unlock()
+	if l.staleAuthentication() {
+		return nil
+	}
 	state, err := LoadStorageState(l.account.StoragePath)
 	if err != nil {
 		return err
@@ -1802,6 +1835,9 @@ func (l *AccountLease) MergeSetCookieHeaders(headers []string, requestURL string
 	}
 	l.account.storageMu.Lock()
 	defer l.account.storageMu.Unlock()
+	if l.staleAuthentication() {
+		return nil
+	}
 	state, err := LoadStorageState(l.account.StoragePath)
 	if err != nil {
 		return err
@@ -1816,6 +1852,14 @@ func (l *AccountLease) MergeSetCookieHeaders(headers []string, requestURL string
 	l.account.StorageState = state
 	l.pool.mu.Unlock()
 	return nil
+}
+
+// staleAuthentication is called with operation and storageMu held. A response
+// started before a refresh may not restore the previous credential snapshot.
+func (l *AccountLease) staleAuthentication() bool {
+	l.pool.mu.Lock()
+	defer l.pool.mu.Unlock()
+	return !l.exclusive && l.authGeneration != l.account.authGeneration
 }
 
 // Release 释放账户文件和进程内租约

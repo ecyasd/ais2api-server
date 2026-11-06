@@ -3,12 +3,14 @@ package aistudio
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/dlclark/regexp2/v2"
+	"github.com/google/uuid"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -25,7 +27,8 @@ type toolContract struct {
 func prepareToolRequest(request GenerateRequest) (GenerateRequest, *toolContract, error) {
 	config := request.Tools.ToolConfig
 	if config.Mode == "none" {
-		return request, nil, nil
+		request.Tools = Tools{ToolConfig: ToolConfig{Mode: "none"}}
+		return request, &toolContract{names: map[string]bool{}}, nil
 	}
 	if search := request.Tools.GoogleSearch; search != nil {
 		if search.ContextSize != "" {
@@ -85,9 +88,11 @@ func prepareToolRequest(request GenerateRequest) (GenerateRequest, *toolContract
 		if err := compiler.AddResource(resource, document); err != nil {
 			return request, nil, err
 		}
-		if schema, err := compiler.Compile(resource); err == nil {
-			contract.schemas[declaration.Name] = schema
+		schema, err := compiler.Compile(resource)
+		if err != nil {
+			return request, nil, fmt.Errorf("function %q strict Schema 无法编译: %w", declaration.Name, err)
 		}
+		contract.schemas[declaration.Name] = schema
 	}
 	for _, name := range config.AllowedFunctionNames {
 		if !contract.names[name] {
@@ -121,9 +126,6 @@ func prepareToolRequest(request GenerateRequest) (GenerateRequest, *toolContract
 	}
 	if contract.parallel != nil {
 		request.System = appendSystem(request.System, "\nCall at most one function in this response.")
-	}
-	if !contract.required && len(config.AllowedFunctionNames) == 0 && len(contract.schemas) == 0 && contract.parallel == nil {
-		contract = nil
 	}
 	return request, contract, nil
 }
@@ -208,6 +210,7 @@ func (contract *toolContract) forward(ctx context.Context, source <-chan Event) 
 	go func() {
 		defer close(destination)
 		calls := 0
+		ids := map[string]bool{}
 		serverSideUsed := false
 		failed := false
 		for event := range source {
@@ -221,9 +224,18 @@ func (contract *toolContract) forward(ctx context.Context, source <-chan Event) 
 			if event.Kind == EventToolCall && event.FunctionCall != nil {
 				calls++
 				call := event.FunctionCall
+				if call.ID == "" {
+					copy := *call
+					copy.ID = uuid.NewString()
+					event.FunctionCall, call = &copy, &copy
+				}
 				switch {
 				case !contract.names[call.Name]:
 					err = fmt.Errorf("上游返回了未选择的函数 %q", call.Name)
+				case call.ID == "" || ids[call.ID]:
+					err = fmt.Errorf("上游工具调用 ID 缺失或重复")
+				case !validToolArguments(call.Arguments):
+					err = fmt.Errorf("上游工具参数必须是完整 JSON object")
 				case contract.parallel != nil && !*contract.parallel && calls > 1:
 					err = fmt.Errorf("上游违反单次工具调用约束")
 				default:
@@ -239,6 +251,7 @@ func (contract *toolContract) forward(ctx context.Context, source <-chan Event) 
 						}
 					}
 				}
+				ids[call.ID] = true
 			}
 			if event.Kind == EventFinish && contract.required && calls == 0 && !(contract.serverSide && serverSideUsed) {
 				err = fmt.Errorf("上游未返回 required tool call")
@@ -255,4 +268,9 @@ func (contract *toolContract) forward(ctx context.Context, source <-chan Event) 
 		}
 	}()
 	return destination
+}
+
+func validToolArguments(arguments json.RawMessage) bool {
+	var object map[string]json.RawMessage
+	return json.Unmarshal(arguments, &object) == nil && object != nil
 }

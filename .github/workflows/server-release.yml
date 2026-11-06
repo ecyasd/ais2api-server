@@ -1,0 +1,34 @@
+name: Fixed Server Release
+
+on:
+  push:
+    tags: ['server-v*']
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    uses: ./.github/workflows/server-ci.yml
+  release:
+    needs: verify
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: server-linux-amd64
+          path: dist
+      - name: Publish fixed candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          cd dist
+          sha256sum aistudio2api server-image.tar.gz > SHA256SUMS
+          printf '{"repository":"%s","commit":"%s","base":"80847a7665c442a238918c957963217773f36291","platform":"linux/amd64","managedBy":"ais2api-server"}\n' "$GH_REPO" "$RELEASE_COMMIT" > provenance.json
+          printf 'Fixed Linux amd64 candidate from %s. Offline contracts and isolated server checks passed. Live SillyTavern, migration and latency acceptance are separate promotion gates.\n' "$RELEASE_COMMIT" > release-notes.txt
+          gh release create "$RELEASE_TAG" --verify-tag --prerelease --target "$RELEASE_COMMIT" --title "$RELEASE_TAG" --notes-file release-notes.txt aistudio2api server-image.tar.gz SHA256SUMS provenance.json

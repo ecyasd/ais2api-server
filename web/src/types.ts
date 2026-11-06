@@ -20,6 +20,10 @@ export type AccountState =
   | 'disabled'
 
 export interface Account {
+  last_success_at?: string
+  credential_updated_at?: string
+  renewal_mode?: string
+  import_completeness?: string
   id: string
   label: string
   enabled: boolean
@@ -176,6 +180,7 @@ export interface AdminLog {
 
 // RequestLog 对应请求日志的结构化载荷
 interface RequestLog {
+  timing?: RequestTiming
   id: string
   state: 'running' | 'completed' | 'tool_calls' | 'limited' | 'blocked' | 'failed' | 'cancelled'
   started_at?: string
@@ -205,6 +210,22 @@ interface RequestLog {
     total_tokens: number
     average_tokens_per_second: number
   }
+}
+
+export interface RequestTiming {
+  upstream_rounds?: { number: number; duration_ms: number; state: string }[]
+  stages_ms: Record<string, number>
+  first_thought_ms: number | null
+  first_body_ms: number | null
+  first_tool_ms: number | null
+  generation_ms: number | null
+  cleanup_ms: number | null
+  background_cleanup_ms: number | null
+  output: string
+  body_events: number
+  thought_events: number
+  tool_events: number
+  attempts: { number: number; channel: string; duration_ms: number; state: string }[]
 }
 
 // ModelPrice 是模型价格表中的一行，input 与 output 为每百万 token 美元，按次计价时对应 per_request 为真

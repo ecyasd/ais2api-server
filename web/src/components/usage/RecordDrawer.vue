@@ -16,6 +16,8 @@ import type { RequestBody, UsageRecord } from '@/types'
 import UiIcon from '../UiIcon.vue'
 import { formatBytes, useUsageFormat } from './format'
 import { latencyTone } from './model'
+import TimingSummary from '../TimingSummary.vue'
+import { product } from '@/product'
 
 const props = defineProps<{ record: UsageRecord | null }>()
 const emit = defineEmits<{ close: [] }>()
@@ -155,6 +157,7 @@ async function copy(kind: string, text: string): Promise<void> {
               </div>
             </dl>
           </section>
+          <TimingSummary :request-id="record.id" />
           <section v-if="record.error">
             <h3 class="mb-2 text-xs font-medium tracking-wide text-gray-500 uppercase">
               {{ t('usage.detailError') }}
@@ -191,7 +194,7 @@ async function copy(kind: string, text: string): Promise<void> {
               </li>
             </ol>
           </section>
-          <section>
+          <section v-if="product.bodyCapture">
             <h3 class="mb-2 text-xs font-medium tracking-wide text-gray-500 uppercase">
               {{ t('usage.detailBody') }}
             </h3>

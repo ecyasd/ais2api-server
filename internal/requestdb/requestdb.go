@@ -88,8 +88,9 @@ type Row struct {
 
 // write 是写入协程处理的一条用量或正文
 type write struct {
-	row  *Row
-	body *api.RequestBody
+	row    *Row
+	body   *api.RequestBody
+	timing *timingRow
 }
 
 // Logger 输出账本写入失败与丢弃记录的运行日志
@@ -112,7 +113,7 @@ func Open(path string, log Logger) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
-	db, err := sqlitedb.Open(path, schema)
+	db, err := sqlitedb.Open(path, schema+timingSchema)
 	if err != nil {
 		return nil, fmt.Errorf("初始化请求账本: %w", err)
 	}
@@ -266,7 +267,18 @@ func (store *Store) write(batch []write) (err error) {
 	}()
 	hours, days := map[rollupKey]*entry{}, map[rollupKey]*entry{}
 	bodies := false
+	timings := false
 	for _, item := range batch {
+		if item.timing != nil {
+			timings = true
+			encoded, encodeErr := json.Marshal(item.timing.report)
+			if encodeErr != nil {
+				return encodeErr
+			}
+			if _, timingErr := tx.Exec(`INSERT INTO server_request_timings (id,time,revision,report) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET report=excluded.report, revision=excluded.revision WHERE excluded.revision >= server_request_timings.revision`, item.timing.id, item.timing.report.StartedAt.UnixMilli(), item.timing.report.Revision, string(encoded)); timingErr != nil {
+				return timingErr
+			}
+		}
 		if row := item.row; row != nil {
 			attempts := row.Attempts
 			if attempts == nil {
@@ -324,6 +336,11 @@ func (store *Store) write(batch []write) (err error) {
 			return err
 		}
 	}
+	if timings {
+		if _, err := tx.Exec(`DELETE FROM server_request_timings WHERE time < ? OR id IN (SELECT id FROM server_request_timings ORDER BY time DESC LIMIT -1 OFFSET 10000)`, timingCutoff()); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 
@@ -361,13 +378,14 @@ func mergeRollup(tx *sql.Tx, table string, key rollupKey, value *entry) error {
 
 // prune 删除超过保留期的数据，记录与汇总都从截止时间所在本地日的起点开始保留
 func (store *Store) prune() {
+	_, timingErr := store.db.Exec(`DELETE FROM server_request_timings WHERE time < ?`, timingCutoff())
 	day, _ := localDay(time.Now().Add(-usageRetention).UnixMilli())
 	hour := floorDiv(day, hourMS) * hourMS
 	_, requestsErr := store.db.Exec(`DELETE FROM requests WHERE time < ?`, hour)
 	_, hoursErr := store.db.Exec(`DELETE FROM hours WHERE start < ?`, hour)
 	_, daysErr := store.db.Exec(`DELETE FROM days WHERE start < ?`, day)
 	reclaimErr := sqlitedb.Reclaim(context.Background(), store.db)
-	if err := errors.Join(requestsErr, hoursErr, daysErr, reclaimErr); err != nil {
+	if err := errors.Join(requestsErr, hoursErr, daysErr, timingErr, reclaimErr); err != nil {
 		store.log("ERROR", fmt.Sprintf("请求账本清理失败 | 错误=%v", err))
 	}
 }

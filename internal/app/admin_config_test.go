@@ -35,7 +35,7 @@ func TestAdminConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(raw), "test-password") || !value.AdminPasswordSet || !value.BuildNativeNonstream {
+	if strings.Contains(string(raw), "test-password") || !value.AdminPasswordSet || value.BuildNativeNonstream {
 		t.Fatalf("config=%s", raw)
 	}
 	value.Proxy = "http://127.0.0.1:1234"
@@ -68,7 +68,7 @@ func TestAdminConfig(t *testing.T) {
 		t.Fatalf("empty enabled password error = %v", err)
 	}
 	value.AdminAuthEnabled = false
-	if _, err := admin.UpdateRuntimeConfig(ctx, value); err != nil {
-		t.Fatal(err)
+	if _, err := admin.UpdateRuntimeConfig(ctx, value); err == nil {
+		t.Fatal("server profile must retain management authentication")
 	}
 }

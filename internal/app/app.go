@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -20,6 +21,7 @@ import (
 	"github.com/Mag1cFall/AIStudio2API/internal/api"
 	"github.com/Mag1cFall/AIStudio2API/internal/config"
 	"github.com/Mag1cFall/AIStudio2API/internal/i18n"
+	"github.com/Mag1cFall/AIStudio2API/internal/product"
 	"github.com/Mag1cFall/AIStudio2API/internal/promptdb"
 	"github.com/Mag1cFall/AIStudio2API/internal/requestdb"
 	"github.com/Mag1cFall/AIStudio2API/internal/setup"
@@ -79,7 +81,14 @@ func runCommand(args []string, logs *logOutput, executable string) (restart bool
 	defer cancel()
 
 	if len(args) != 0 && args[0] == "setup" {
+		if runtime.GOOS != "windows" {
+			return false, fmt.Errorf("服务器请在管理页导入账户；原电脑配对助手仅在 Windows 上运行")
+		}
 		return false, setup.Run(ctx, cfg, args[1:])
+	}
+	cfg = product.Constrain(cfg)
+	if err := product.ValidateCredentials(cfg); err != nil {
+		return false, err
 	}
 	options, err := parseFlags(args, &cfg)
 	if err != nil {
@@ -145,21 +154,29 @@ func runService(ctx context.Context, cancel func(), cfg config.Config, options c
 	if err != nil {
 		return false, errors.Join(fmt.Errorf("打开请求账本: %w", err), manager.Close())
 	}
-	ledger.SetBodyCapture(cfg.RequestBodyLog)
+	ledger.SetBodyCapture(product.Server().BodyCapture && cfg.RequestBodyLog)
 	manager.ledger = ledger
 	if err := manager.seedFirstEvents(ctx); err != nil {
 		logService("WARN", "读取近期首事件样本失败 | 错误="+err.Error())
 	}
-	prompts, err := promptdb.Open(filepath.Join("runtime", "prompts.db"))
-	if err != nil {
-		return false, errors.Join(fmt.Errorf("打开对话库: %w", err), manager.Close(), ledger.Close())
+	closePrompts := func() error { return nil }
+	if product.Server().PromptStore {
+		prompts, err := promptdb.Open(filepath.Join("runtime", "prompts.db"))
+		if err != nil {
+			return false, errors.Join(fmt.Errorf("打开对话库: %w", err), manager.Close(), ledger.Close())
+		}
+		manager.prompts = prompts
+		closePrompts = prompts.Close
 	}
-	manager.prompts = prompts
-	states, err := statedb.Open(filepath.Join("runtime", "states.db"), logService)
-	if err != nil {
-		return false, errors.Join(fmt.Errorf("打开续接状态库: %w", err), manager.Close(), ledger.Close(), prompts.Close())
+	closeStates := func() error { return nil }
+	if product.Server().ExtraProtocols {
+		states, err := statedb.Open(filepath.Join("runtime", "states.db"), logService)
+		if err != nil {
+			return false, errors.Join(fmt.Errorf("打开续接状态库: %w", err), manager.Close(), ledger.Close(), closePrompts())
+		}
+		manager.states = states
+		closeStates = states.Close
 	}
-	manager.states = states
 	manager.logs = logs
 	updater := newSelfUpdater(buildVersion(), executable, manager.egressProxy, logService, updateRestart(cancel, restarting, logService))
 	started, err = runServer(ctx, cfg, manager, updater, func(address string) {
@@ -168,7 +185,7 @@ func runService(ctx context.Context, cancel func(), cfg config.Config, options c
 	if started {
 		cancel()
 	}
-	return started, errors.Join(err, manager.Close(), ledger.Close(), prompts.Close(), states.Close())
+	return started, errors.Join(err, manager.Close(), ledger.Close(), closePrompts(), closeStates())
 }
 
 // parseFlags 使用命令行参数覆盖本次启动配置
@@ -230,24 +247,28 @@ func runServer(ctx context.Context, cfg config.Config, manager *runtimeManager, 
 	if err != nil {
 		return false, fmt.Errorf("监听 %s: %w", cfg.ListenAddr, err)
 	}
-	manager.requests.log("service", "INFO", fmt.Sprintf("预览监听启动 | 地址=%s", cfg.PreviewListenAddr))
-	previewListener, err := net.Listen("tcp", cfg.PreviewListenAddr)
-	if err != nil {
-		host, _, _ := net.SplitHostPort(cfg.PreviewListenAddr)
-		previewListener, err = net.Listen("tcp", net.JoinHostPort(host, "0"))
+	var previewListener net.Listener
+	if product.Server().Preview {
+		manager.requests.log("service", "INFO", fmt.Sprintf("预览监听启动 | 地址=%s", cfg.PreviewListenAddr))
+		previewListener, err = net.Listen("tcp", cfg.PreviewListenAddr)
 		if err != nil {
-			listener.Close()
-			return false, fmt.Errorf("监听 %s: %w", cfg.PreviewListenAddr, err)
+			host, _, _ := net.SplitHostPort(cfg.PreviewListenAddr)
+			previewListener, err = net.Listen("tcp", net.JoinHostPort(host, "0"))
+			if err != nil {
+				listener.Close()
+				return false, fmt.Errorf("监听 %s: %w", cfg.PreviewListenAddr, err)
+			}
+			manager.requests.log("service", "WARN", fmt.Sprintf("预览端口不可用，改用空闲端口 | 配置=%s | 地址=%s", cfg.PreviewListenAddr, previewListener.Addr()))
 		}
-		manager.requests.log("service", "WARN", fmt.Sprintf("预览端口不可用，改用空闲端口 | 配置=%s | 地址=%s", cfg.PreviewListenAddr, previewListener.Addr()))
+		manager.previewAddress = previewListener.Addr().String()
 	}
-	manager.previewAddress = previewListener.Addr().String()
+	profile := product.Server()
 	apiHandler := api.NewHandler(manager, api.Config{
+		Product: &profile, CurrentAPIKeys: manager.modelAPIKeys,
 		APIKey: cfg.ProxyAPIKey, Admin: manager, Ledger: manager.ledger, Prompts: manager.prompts, Updates: updater,
 		AdminAuthEnabled: cfg.AdminAuthEnabled, AdminUsername: cfg.AdminUsername, AdminPassword: cfg.AdminPassword,
 		AdminSessionPath: filepath.Join("runtime", "admin-sessions.json"),
-		MediaDir:         filepath.Join("runtime", "media"), MediaLimit: mediaLimit, MediaLinks: manager.mediaLinks,
-		ResponseModes: manager.responseModes, WaitLaunch: manager.WaitLaunch,
+		ResponseModes:    manager.responseModes, WaitLaunch: manager.WaitLaunch,
 		SearchSettings: manager.searchSettings, EgressProxy: manager.egressProxy, States: manager.states,
 	})
 	server := &http.Server{
@@ -260,13 +281,17 @@ func runServer(ctx context.Context, cfg config.Config, manager *runtimeManager, 
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 	}
-	serveError := make(chan error, 2)
+	servers := []*http.Server{server}
+	if previewListener != nil {
+		servers = append(servers, previewServer)
+	}
+	serveError := make(chan error, len(servers))
 	go func() {
 		serveError <- server.Serve(listener)
 	}()
-	go func() {
-		serveError <- previewServer.Serve(previewListener)
-	}()
+	if previewListener != nil {
+		go func() { serveError <- previewServer.Serve(previewListener) }()
+	}
 
 	address := "http://" + browserAddress(listener.Addr().String())
 	manager.requests.log("service", "INFO", "管理服务就绪 | 地址="+address)
@@ -284,7 +309,7 @@ func runServer(ctx context.Context, cfg config.Config, manager *runtimeManager, 
 	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	for _, current := range []*http.Server{server, previewServer} {
+	for _, current := range servers {
 		if err := current.Shutdown(shutdownCtx); err != nil {
 			current.Close()
 			slog.Warn("监听关闭超时，断开剩余连接", "error", err)
@@ -355,8 +380,23 @@ func rootHandler(apiHandler http.Handler) http.Handler {
 	root.Handle("/v1beta/", apiHandler)
 	root.Handle("/upload/", apiHandler)
 	root.Handle("/media/", apiHandler)
-	root.Handle("/", webui.Handler())
+	root.Handle("/", serverWebHandler(webui.Handler()))
 	return securityHeaders(root)
+}
+
+func serverWebHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		profile := product.Server()
+		if !profile.Studio {
+			for _, prefix := range profile.DisabledPages {
+				if r.URL.Path == prefix || strings.HasPrefix(r.URL.Path, prefix+"/") {
+					http.NotFound(w, r)
+					return
+				}
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // compressAdmin 以 gzip 压缩管理接口发给接受 gzip 的客户端的 JSON、CSV 与事件流响应

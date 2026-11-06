@@ -11,6 +11,7 @@ import (
 
 	"github.com/Mag1cFall/AIStudio2API/internal/aistudio"
 	"github.com/Mag1cFall/AIStudio2API/internal/api"
+	"github.com/Mag1cFall/AIStudio2API/internal/telemetry"
 )
 
 // requestRegistry 保存活动请求与事件订阅
@@ -162,6 +163,12 @@ func (registry *requestRegistry) log(source string, level string, message string
 
 // recordLog 将同一结构化事件发布到管理页面与控制台
 func (registry *requestRegistry) recordLog(entry api.AdminLog) {
+	entry.Message = telemetry.Message(entry.Message)
+	if entry.Request != nil && entry.Request.Error != "" {
+		copy := *entry.Request
+		copy.Error = "upstream_failure"
+		entry.Request = &copy
+	}
 	entry.Time = time.Now().UTC()
 	registry.mu.Lock()
 	registry.logs = append(registry.logs, entry)

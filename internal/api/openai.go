@@ -239,6 +239,12 @@ func (s *server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeOpenAIError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
+	if s.config.Product != nil {
+		if err := validateChatToolHistory(request.Messages); err != nil {
+			writeOpenAIError(w, http.StatusBadRequest, "invalid_tool_history", err.Error())
+			return
+		}
+	}
 	requestID := newID("chatcmpl")
 	s.resolveChatAudio(request.Messages)
 	generateRequest, err := request.toGenerateRequest(requestID)
@@ -833,7 +839,7 @@ func openAIToolChoice(raw json.RawMessage) (aistudio.ToolConfig, []toolReference
 	case "mcp":
 		return aistudio.ToolConfig{Mode: "required"}, []toolReference{object.toolReference}, nil
 	case "file_search", "image_generation", "programmatic_tool_calling", "tool_search":
-		return aistudio.ToolConfig{Mode: "auto"}, nil, nil
+		return aistudio.ToolConfig{}, nil, fmt.Errorf("unsupported forced tool_choice type %q", object.Type)
 	}
 	if hostedGoogleTools[object.Type] != "" {
 		return aistudio.ToolConfig{Mode: "required"}, []toolReference{object.toolReference}, nil

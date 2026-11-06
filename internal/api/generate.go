@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Mag1cFall/AIStudio2API/internal/aistudio"
+	"github.com/Mag1cFall/AIStudio2API/internal/telemetry"
 )
 
 var errIncompleteStream = errors.New("upstream stream closed before finish")
@@ -176,6 +177,17 @@ func consumeStreamEvents(ctx context.Context, events <-chan aistudio.Event, emit
 				if !result.finished {
 					return result, errIncompleteStream
 				}
+				if emit == nil {
+					if result.text.Len() > 0 {
+						telemetry.Semantic(ctx, "body")
+					}
+					if result.reasoning.Len() > 0 {
+						telemetry.Semantic(ctx, "thought")
+					}
+					if len(result.toolCalls) > 0 {
+						telemetry.Semantic(ctx, "tool")
+					}
+				}
 				return result, nil
 			}
 			if err := result.apply(event); err != nil {
@@ -185,6 +197,17 @@ func consumeStreamEvents(ctx context.Context, events <-chan aistudio.Event, emit
 				if err := emit(event); err != nil {
 					return result, err
 				}
+				switch {
+				case event.Kind == aistudio.EventText && event.Text != "":
+					telemetry.Semantic(ctx, "body")
+				case event.Kind == aistudio.EventReasoning && event.Text != "":
+					telemetry.Semantic(ctx, "thought")
+				case event.Kind == aistudio.EventToolCall && event.FunctionCall != nil:
+					telemetry.Semantic(ctx, "tool")
+				}
+			}
+			if event.Kind == aistudio.EventFinish {
+				telemetry.Semantic(ctx, "finish")
 			}
 		}
 	}

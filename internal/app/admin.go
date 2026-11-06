@@ -19,6 +19,7 @@ import (
 	"github.com/Mag1cFall/AIStudio2API/internal/camoufoxnative"
 	"github.com/Mag1cFall/AIStudio2API/internal/chromeauth"
 	"github.com/Mag1cFall/AIStudio2API/internal/config"
+	"github.com/Mag1cFall/AIStudio2API/internal/product"
 )
 
 // runtimeAdmin 投影运行时权威状态
@@ -363,6 +364,14 @@ func (admin *runtimeAdmin) ImportAccountState(ctx context.Context, input api.Acc
 		return api.AdminAccount{}, invalidAccount(err)
 	}
 	label := strings.TrimSpace(input.Label)
+	if label == "" && !product.Server().BrowserLogin {
+		if extension, exists, err := input.StorageState.AuthExtension(); err == nil && exists {
+			label = strings.TrimSpace(extension.Source.Email)
+		}
+		if label == "" {
+			return api.AdminAccount{}, invalidAccount(fmt.Errorf("请提供账户邮箱或名称；仅保存导入不会在线识别身份"))
+		}
+	}
 	if label == "" {
 		verification, err := chromeauth.VerifyAuthUser(ctx, &input.StorageState, admin.effectiveProxy(input.Proxy), input.AuthUser)
 		if errors.Is(err, chromeauth.ErrSignedOut) {
@@ -374,6 +383,9 @@ func (admin *runtimeAdmin) ImportAccountState(ctx context.Context, input api.Acc
 		label = strings.ToLower(verification.Email)
 	}
 	accountConfig := aistudio.DefaultAccountConfig(label)
+	if !product.Server().BrowserLogin {
+		accountConfig.Enabled = false
+	}
 	accountConfig.AuthUser = input.AuthUser
 	accountConfig.Proxy = strings.TrimSpace(input.Proxy)
 	if locale := strings.TrimSpace(input.Locale); locale != "" {
@@ -399,6 +411,9 @@ func (admin *runtimeAdmin) ImportAccountState(ctx context.Context, input api.Acc
 	}
 	for _, status := range admin.pool.Status() {
 		if strings.EqualFold(status.ID, strings.TrimSpace(email)) {
+			if !product.Server().BrowserLogin {
+				return admin.replaceImportedState(ctx, status.ID, input)
+			}
 			return api.AdminAccount{}, &adminOperationError{
 				status: http.StatusConflict, code: "account_exists", message: "账户已存在: " + status.ID,
 			}
@@ -422,6 +437,11 @@ func (admin *runtimeAdmin) ImportAccountState(ctx context.Context, input api.Acc
 	}
 	if input.RenewalToken != "" {
 		if err := admin.savePairingRenewal(account.ID, input.RenewalToken); err != nil {
+			return api.AdminAccount{}, err
+		}
+	}
+	if native, err := admin.pool.Account(account.ID); err == nil {
+		if err := updateServerAccountMetadata(native.Directory, func(meta *serverAccountMetadata) { meta.ImportCompleteness = input.ImportCompleteness }); err != nil {
 			return api.AdminAccount{}, err
 		}
 	}
@@ -467,7 +487,9 @@ func (admin *runtimeAdmin) addAccount(
 	if _, err := admin.proxies.Assign(); err != nil {
 		return api.AdminAccount{}, err
 	}
-	admin.syncAccountModelCatalog(ctx, account)
+	if account.Config.Enabled {
+		admin.syncAccountModelCatalog(ctx, account)
+	}
 	return admin.account(account.ID)
 }
 
@@ -825,12 +847,26 @@ func (admin *runtimeAdmin) loginRequest(account *aistudio.Account, directory str
 }
 
 func adminAccountDTO(status aistudio.AccountStatus) api.AdminAccount {
-	return api.AdminAccount{
+	value := api.AdminAccount{
 		ID: status.ID, Label: status.Label, Enabled: status.Enabled, State: string(status.State),
 		Proxy: status.Proxy, Egress: status.Egress, Locale: status.Locale, Timezone: status.Timezone,
 		Models: status.Models, BenefitTier: status.BenefitTier, Message: status.Message,
 		PairingRenewedAt: pairingRenewedAt(status.Directory),
 	}
+	meta := readServerAccountMetadata(status.Directory)
+	value.LastSuccessAt, value.ImportCompleteness = meta.LastSuccess, meta.ImportCompleteness
+	value.RenewalMode = "cookie_import"
+	if _, err := readPairingRenewal(status.Directory); err == nil {
+		value.RenewalMode = "origin_computer"
+	}
+	if info, err := os.Stat(filepath.Join(status.Directory, "storage-state.json")); err == nil {
+		at := info.ModTime().UTC()
+		value.CredentialUpdatedAt = &at
+	}
+	if status.State == aistudio.AccountAuthRequired {
+		value.Message = "Google 会话失效，请重新导入或由配对电脑更新"
+	}
+	return value
 }
 
 // accountTimezone 返回去掉不可见字符后的账户时区，为空时返回空串，无法加载时返回带原值的错误
@@ -871,6 +907,7 @@ func (admin *runtimeAdmin) RuntimeConfig(context.Context) (api.RuntimeConfig, er
 	if err != nil {
 		return api.RuntimeConfig{}, err
 	}
+	cfg = product.Constrain(cfg)
 	value := runtimeConfigDTO(cfg)
 	value.ActiveProxy = admin.config.Proxy
 	value.ProxyPool = admin.proxyPoolStatus()
@@ -917,6 +954,10 @@ func (admin *runtimeAdmin) UpdateRuntimeConfig(_ context.Context, value api.Runt
 		MediaOutput:            strings.ToLower(strings.TrimSpace(value.MediaOutput)),
 		MediaBaseURL:           strings.TrimSpace(value.MediaBaseURL),
 	}.KeepEnvironment(saved)
+	cfg = product.Constrain(cfg)
+	if err := product.ValidateCredentials(cfg); err != nil {
+		return api.RuntimeConfig{}, invalidConfigError(err)
+	}
 	if err := cfg.Validate(); err != nil {
 		return api.RuntimeConfig{}, invalidConfigError(err)
 	}
