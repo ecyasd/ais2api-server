@@ -96,15 +96,28 @@ def run(binary):
             for _ in range(100):
                 task = next(item for item in call("/api/accounts/tasks", 200, admin)["tasks"] if item["id"] == batch["task"]["id"])
                 if task["state"] != "running":
-                    assert task["state"] == "done" and all(item["state"] == "done" for item in task["items"])
+                    # Upstream verifies Cookie sessions rather than trusting the
+                    # selected display email. Closed outbound access must reject
+                    # synthetic sessions, not revive a save-only import shortcut.
+                    assert task["state"] == "failed" and all(item["state"] == "failed" for item in task["items"])
                     break
                 time.sleep(0.05)
             else:
                 raise TimeoutError("synthetic native cookie batch")
+            assert call("/api/accounts", 200, admin)["accounts"] == []
+            passed.append("native_cookie_batch_requires_session_verification")
+            pairing = call("/api/pairing", 201, admin, {})["token"]
+            for email, auth_user in [("fixture@example.com", 2), ("second@example.com", 1)]:
+                source_state = json.loads(json.dumps(state))
+                source_state["aistudio2api"]["source"]["email"] = email
+                call("/api/pairing/accounts", 201, pairing, {"label": email, "storage_state": source_state,
+                     "auth_user": auth_user, "locale": "en-GB", "timezone": "Europe/London"})
+            call("/api/pairing/accounts", 409, pairing, {"label": "second@example.com", "storage_state": source_state,
+                 "auth_user": 1, "locale": "en-GB", "timezone": "Europe/London"})
             accounts = call("/api/accounts", 200, admin)["accounts"]
             assert len(accounts) == 2 and all(account["enabled"] for account in accounts)
             assert not call("/api/status", 200, admin)["running"]
-            passed.append("upstream_cookie_batch_defaults_without_custom_adapter")
+            passed.append("native_pairing_defaults_and_duplicate_handling")
             config["proxy_api_key"] = "rotated-synthetic-key"
             call("/api/config", 200, admin, config, "PUT")
             call("/v1/models", 401, key)
