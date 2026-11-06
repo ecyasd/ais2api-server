@@ -487,7 +487,7 @@ async function saveConfig(): Promise<void> {
               :label="t('settings.apiKey')"
               control-id="setting-api-key"
               :description="t('settings.apiKeyHelp')"
-              effect="management"
+              effect="immediate"
               :changed="changedFields.has('proxy_api_key')"
               :env="environmentKey('proxy_api_key')"
             >

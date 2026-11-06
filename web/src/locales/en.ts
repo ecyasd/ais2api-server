@@ -282,7 +282,7 @@ export const messages: Record<TranslationKey, string> = {
   'settings.authPath': 'Account state path',
   'settings.listen': 'Listen address',
   'settings.previewListen': 'Preview listen address',
-  'settings.apiKey': 'Local API key',
+  'settings.apiKey': 'Model API keys',
   'settings.apiKeyAccounts': 'Accounts per key',
   'settings.proxy': 'Default proxy',
   'settings.initTimeout': 'Init timeout',
@@ -325,7 +325,8 @@ export const messages: Record<TranslationKey, string> = {
   'models.channelSaved': 'Channel saved and in effect',
   'settings.activeValue': 'Active',
   'settings.pendingService': 'Saved values apply the next time the generation service starts',
-  'settings.pendingManagement': 'Restart the app to apply the listen address or API key',
+  'settings.pendingManagement':
+    'Restart the app to apply the listen address or management credentials',
   'settings.saved': 'Settings saved',
   'settings.savedService':
     'Settings saved. Stop and start the generation service at the bottom left to apply them.',
@@ -1564,7 +1565,7 @@ export const messages: Record<TranslationKey, string> = {
   'settings.addMapping': 'Add mapping',
   'settings.addModelChannel': 'Add model',
   'settings.apiKeyHelp':
-    'Press Enter or type a comma to add a key; pasting comma-separated keys adds each one. When empty, only pages on this machine can call the API',
+    'Press Enter or type a comma to add a key; pasting comma-separated keys adds each one. Changes apply when saved. Empty keys deny all model calls. Keys must differ from the management password.',
   'settings.apiKeyPlaceholder': 'Enter a key',
   'settings.apiKeyMore': 'Add another key',
   'settings.keyShow': 'Show key {key}',
