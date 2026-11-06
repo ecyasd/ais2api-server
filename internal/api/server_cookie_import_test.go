@@ -63,7 +63,10 @@ func TestServerNativeCookieDiscoveryBatchAndBrowserBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state.Extra = map[string]json.RawMessage{"aistudio2api": json.RawMessage(`{"source":{"browser":"fixture","email":"first@example.com","opaque":"synthetic-source-metadata"}}`)}
+	state.SetAuthExtension(aistudio.AuthExtension{
+		Source: aistudio.AuthSource{Browser: "fixture", Email: "first@example.com"},
+		OAuth:  &aistudio.ChromeOAuthMaterial{GaiaID: "synthetic-gaia", RefreshToken: "synthetic-source-metadata"},
+	})
 	wrapped, _ := json.Marshal(AccountStateInput{StorageState: state, AuthUser: 2, Locale: "en-GB", Timezone: "Europe/London"})
 	full := request("POST", "/api/accounts/import/cookies/discover", CookieImportInput{Cookies: string(wrapped)})
 	if full.Code != 200 || !strings.Contains(full.Body.String(), `"auth_user":2`) || !strings.Contains(full.Body.String(), `"imported":true`) {
@@ -110,7 +113,8 @@ func TestServerNativeCookieDiscoveryBatchAndBrowserBoundary(t *testing.T) {
 			if full.Label != "first@example.com" || full.AuthUser != 2 || full.Locale != "en-GB" || full.Timezone != "Europe/London" || full.ImportCompleteness != "full_state" {
 				t.Fatal("full native import metadata lost")
 			}
-			if !strings.Contains(string(full.StorageState.Extra["aistudio2api"]), "synthetic-source-metadata") {
+			extension, exists, extensionErr := full.StorageState.AuthExtension()
+			if extensionErr != nil || !exists || extension.OAuth == nil || extension.OAuth.RefreshToken != "synthetic-source-metadata" {
 				t.Fatal("native source extension lost")
 			}
 			if admin.imports[1].ImportCompleteness != "partial" || admin.imports[1].AuthUser != 1 {
