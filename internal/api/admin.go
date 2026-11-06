@@ -434,7 +434,7 @@ func (s *server) handleDiscoverCookieAccounts(w http.ResponseWriter, r *http.Req
 		writeAdminError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	if s.config.Product != nil {
+	if s.config.Product != nil && nativeStateEnvelope(input.Cookies) {
 		parsed, _, err := parseServerImport(serverImportInput{Data: input.Cookies})
 		if err != nil {
 			writeAdminError(w, http.StatusBadRequest, "invalid_cookies", err.Error())

@@ -5,6 +5,16 @@ export { default as serverMessages } from '../../../internal/i18n/messages/zh-TW
 
 // messages 是界面文案与管理接口错误码文案
 export const messages: Record<TranslationKey, string> = {
+  'accounts.remoteChromeHelp': '自動尋找你電腦上的 Chrome 帳戶，選取後傳送到這裡',
+  'accounts.remoteLoginHelp': '在你的電腦登入 Google，將登入狀態傳送到這裡',
+  'accounts.remoteBrowserHelp': '在原電腦讀取指紋瀏覽器的 Cookie；填寫該瀏覽器的偵錯位址',
+  'accounts.remoteBrowser': '該電腦的指紋瀏覽器',
+  'accounts.remoteBrowserAddress': '原電腦的瀏覽器偵錯位址',
+  'accounts.remoteAuthUser': 'Google 工作階段編號（0–9）',
+  'accounts.remoteBrowserAddressInvalid':
+    '請輸入本機偵錯位址，例如 http://127.0.0.1:9222，並選取 0–9 的工作階段編號',
+  'accounts.cookieImportHint':
+    '支援貼上 Cookie 標頭、Cookie-Editor JSON、cookies.txt 和完整狀態，也可一次選取多個檔案。輸入後自動辨識帳戶，勾選後批次匯入。',
   'auth.username': '使用者名稱',
   'auth.password': '密碼',
   'auth.login': '登入',

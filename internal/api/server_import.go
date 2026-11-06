@@ -19,6 +19,15 @@ type serverImportInput struct {
 	AuthUser *int   `json:"auth_user"`
 }
 
+// nativeStateEnvelope 只扩展完整 AIS2 状态，普通 Cookie 继续走上游原生识别。
+func nativeStateEnvelope(text string) bool {
+	var object map[string]json.RawMessage
+	if json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(text, "\ufeff"))), &object) != nil {
+		return false
+	}
+	return object["storage_state"] != nil || object["origins"] != nil || object["aistudio2api"] != nil
+}
+
 func parseServerImport(input serverImportInput) (AccountStateInput, bool, error) {
 	text := strings.TrimSpace(strings.TrimPrefix(input.Data, "\ufeff"))
 	var state aistudio.StorageState

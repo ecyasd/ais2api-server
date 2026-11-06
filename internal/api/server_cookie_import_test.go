@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,9 +17,10 @@ import (
 
 type serverCookieAdmin struct {
 	AdminService
-	mu          sync.Mutex
-	imports     []AccountStateInput
-	discoveries int
+	mu           sync.Mutex
+	imports      []AccountStateInput
+	discoveries  int
+	cookieInputs []string
 }
 
 func (*serverCookieAdmin) Accounts(context.Context) ([]AdminAccount, error) {
@@ -29,6 +31,7 @@ func (admin *serverCookieAdmin) DiscoverCookieAccounts(_ context.Context, input 
 	admin.mu.Lock()
 	defer admin.mu.Unlock()
 	admin.discoveries++
+	admin.cookieInputs = append(admin.cookieInputs, input.Cookies)
 	return []CookieBrowser{{Email: "first@example.com", AuthUser: 0, Imported: true}, {Email: "second@example.com", AuthUser: 1}}, nil
 }
 
@@ -41,6 +44,41 @@ func (admin *serverCookieAdmin) ImportAccountState(_ context.Context, input Acco
 
 func cookieImportFixture() string {
 	return "__Secure-1PSID=synthetic; SAPISID=synthetic; __Secure-1PAPISID=synthetic; __Secure-3PAPISID=synthetic"
+}
+
+func TestServerCookieFormatsReachNativeDiscoveryUnchanged(t *testing.T) {
+	state, err := aistudio.ParseCookieText(cookieImportFixture())
+	if err != nil {
+		t.Fatal(err)
+	}
+	array, _ := json.Marshal(state.Cookies)
+	object, _ := json.Marshal(map[string]any{"cookies": state.Cookies})
+	var netscape strings.Builder
+	netscape.WriteString("# Netscape HTTP Cookie File\n")
+	for _, cookie := range state.Cookies {
+		fmt.Fprintf(&netscape, "%s\tTRUE\t/\tTRUE\t0\t%s\t%s\n", cookie.Domain, cookie.Name, cookie.Value)
+	}
+	for name, text := range map[string]string{
+		"header": cookieImportFixture(), "extension_array": string(array),
+		"extension_object": string(object), "netscape": netscape.String(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			admin := &serverCookieAdmin{}
+			profile := product.Server()
+			handler := NewHandler(nil, Config{Admin: admin, Product: &profile, AdminAuthEnabled: true, AdminUsername: "admin", AdminPassword: "synthetic-admin"})
+			body, _ := json.Marshal(CookieImportInput{Cookies: text})
+			r := httptest.NewRequest("POST", "/api/accounts/import/cookies/discover", strings.NewReader(string(body)))
+			r.Header.Set("Authorization", "Bearer synthetic-admin")
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+			if w.Code != 200 || len(admin.cookieInputs) != 1 || admin.cookieInputs[0] != text {
+				t.Fatal("native discovery input was replaced by server import conversion", w.Code)
+			}
+			if !strings.Contains(w.Body.String(), `"auth_user":1`) {
+				t.Fatal("native multi-account discovery result lost")
+			}
+		})
+	}
 }
 
 func TestServerNativeCookieDiscoveryBatchAndBrowserBoundary(t *testing.T) {

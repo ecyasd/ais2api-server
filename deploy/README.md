@@ -65,6 +65,16 @@ account checkboxes and batch task list. Raw Cookie discovery contacts Google onl
 after the owner supplies import data; it does not start a browser or call a model.
 Complete native exports keep their identity and environment metadata. Existing
 accounts can be selected to replace credentials without deleting the account.
+All five AIS2 account-addition entries remain visible. Browser login, Chrome
+discovery and fingerprint-browser Cookie reading use the native remote-pairing
+dialog on this server. Run its command on the source computer using the pinned
+upstream v0.3.1 helper: Chrome discovery uses `setup --remote`, new-window login
+adds `--login`, and fingerprint-browser reading adds `--cdp` with the source
+computer's local debugging address and `--authuser` (0–9). These commands send
+native account state to the server; the server never launches a browser or reads
+the web visitor's browser through a cloud-side scan. Cookie text and files are
+imported directly in the management page. Ordinary Cookie formats reach native
+discovery unchanged; the full-state adapter only handles complete state envelopes.
 
 ## Data inventory and consistent recovery
 
