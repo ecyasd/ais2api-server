@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Mag1cFall/AIStudio2API/internal/telemetry"
 	"github.com/google/uuid"
 )
 
@@ -286,6 +287,8 @@ func scriptJSON(value any) (string, error) {
 
 // sendAssistant 在对话所在的应用中只提交新增轮次，没有可继续的应用时新建应用并提交全部历史，返回任务流；本轮结束时没有正文与函数调用的，在同一应用中追加用户轮请模型继续，用量按续写合并；流关闭后取消未完成的任务，本轮回复完整结束时对话保存为可继续，否则放弃应用留待巡检删除
 func (c *Client) sendAssistant(ctx context.Context, request GenerateRequest, entry modelEntry) (*RPCResponse, func(io.Reader, func(Event) error) error, error) {
+	submitted := telemetry.Start(ctx, telemetry.Submit)
+	defer submitted()
 	reason := ""
 	if request.Unary {
 		reason = "Build 写代码助手使用服务端流，收集完成后返回"
@@ -301,7 +304,7 @@ func (c *Client) sendAssistant(ctx context.Context, request GenerateRequest, ent
 	history := assistantHistoryDigest(request.Contents)
 	links := assistantLinks(request.Contents)
 	session, start := c.assistants.claim(apiKey, request.AccountID, links)
-	cleanup := &assistantCleanup{client: c, accountID: request.AccountID, session: session}
+	cleanup := &assistantCleanup{client: c, accountID: request.AccountID, session: session, timingContext: ctx}
 	cleanup.transcribed = slices.ContainsFunc(request.Contents[start:], func(content Content) bool { return content.Role == RoleAssistant }) ||
 		session != nil && session.transcribed
 	request.Contents = assistantSearches.restore(apiKey, request.Contents)
@@ -571,9 +574,10 @@ func decodeAssistantGeneration(source io.Reader) (string, error) {
 
 // assistantCleanup 在请求结束后取消未完成的生成任务，并按回复是否完整结束保存或放弃会话
 type assistantCleanup struct {
-	client    *Client
-	accountID string
-	session   *assistantSession
+	timingContext context.Context
+	client        *Client
+	accountID     string
+	session       *assistantSession
 	// transcribed 表示请求结束后应用中有以 user 轮转录的模型历史轮
 	transcribed bool
 	// generation 是应用中最近提交的任务 ID
@@ -593,9 +597,15 @@ func (cleanup *assistantCleanup) run() {
 		cleanup.client.assistants.finish(cleanup.session, cleanup.tip.Load(), cleanup.transcribed)
 		generation := cleanup.generation.Load()
 		if generation == nil || *generation == "" || cleanup.completed.Load() {
+			if cleanup.timingContext != nil {
+				telemetry.CleanupDone(cleanup.timingContext, true)
+			}
 			return
 		}
 		go func() {
+			if cleanup.timingContext != nil {
+				defer telemetry.CleanupDone(cleanup.timingContext, true)
+			}
 			ctx, cancel := context.WithTimeout(context.Background(), assistantCleanupTimeout)
 			defer cancel()
 			body, _ := json.Marshal([]any{*generation, cleanup.session.applet})

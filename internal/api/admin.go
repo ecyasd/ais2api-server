@@ -8,6 +8,7 @@ import (
 
 	"github.com/Mag1cFall/AIStudio2API/internal/aistudio"
 	"github.com/Mag1cFall/AIStudio2API/internal/camoufoxnative"
+	"github.com/Mag1cFall/AIStudio2API/internal/telemetry"
 )
 
 // AdminService 定义管理端需要的权威状态能力
@@ -78,6 +79,7 @@ type AdminLog struct {
 
 // RequestLog 保存可关联的请求状态、用量与诊断字段
 type RequestLog struct {
+	Timing          *telemetry.Report `json:"timing,omitempty"`
 	ID              string            `json:"id"`
 	State           string            `json:"state"`
 	StartedAt       time.Time         `json:"started_at,omitzero"`
@@ -116,6 +118,7 @@ type RequestLogUsage struct {
 
 // AccessLog 表示一次公开 API 请求的最终访问记录
 type AccessLog struct {
+	Trace           *telemetry.Trace
 	Status          int
 	Latency         time.Duration
 	FirstEvent      time.Duration
@@ -330,20 +333,27 @@ type AdminEvent struct {
 
 func (s *server) registerAdmin(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/accounts", s.handleAccounts)
-	mux.HandleFunc("POST /api/accounts", s.handleCreateAccount)
-	mux.HandleFunc("GET /api/accounts/import/chrome", s.handleChromeImportProfiles)
-	mux.HandleFunc("POST /api/accounts/import/chrome", s.handleImportChromeAccounts)
-	mux.HandleFunc("GET /api/accounts/import/browsers", s.handleCookieBrowsers)
-	mux.HandleFunc("POST /api/accounts/import/cookies/discover", s.handleDiscoverCookieAccounts)
-	mux.HandleFunc("POST /api/accounts/import/cookies", s.handleImportCookieAccounts)
+	if s.config.Product != nil {
+		mux.HandleFunc("POST /api/accounts/import/state", s.handleServerImport)
+	}
+	if s.config.Product == nil || s.config.Product.BrowserLogin {
+		mux.HandleFunc("POST /api/accounts", s.handleCreateAccount)
+		mux.HandleFunc("GET /api/accounts/import/chrome", s.handleChromeImportProfiles)
+		mux.HandleFunc("POST /api/accounts/import/chrome", s.handleImportChromeAccounts)
+		mux.HandleFunc("GET /api/accounts/import/browsers", s.handleCookieBrowsers)
+		mux.HandleFunc("POST /api/accounts/import/cookies/discover", s.handleDiscoverCookieAccounts)
+		mux.HandleFunc("POST /api/accounts/import/cookies", s.handleImportCookieAccounts)
+	}
 	mux.HandleFunc("GET /api/accounts/tasks", s.handleAccountTasks)
 	mux.HandleFunc("DELETE /api/accounts/tasks/{id}", s.handleDeleteAccountTask)
 	mux.HandleFunc("GET /api/pairing", s.handleActivePairing)
 	mux.HandleFunc("POST /api/pairing", s.handleCreatePairing)
 	mux.HandleFunc("PUT /api/accounts/{id}", s.handleUpdateAccount)
 	mux.HandleFunc("DELETE /api/accounts/{id}", s.handleDeleteAccount)
-	mux.HandleFunc("POST /api/accounts/{id}/login", s.handleLoginAccount)
-	mux.HandleFunc("GET /api/login-view/{view}", s.handleLoginView)
+	if s.config.Product == nil || s.config.Product.BrowserLogin {
+		mux.HandleFunc("POST /api/accounts/{id}/login", s.handleLoginAccount)
+		mux.HandleFunc("GET /api/login-view/{view}", s.handleLoginView)
+	}
 	mux.HandleFunc("POST /api/accounts/{id}/refresh", s.handleRefreshAccount)
 	mux.HandleFunc("POST /api/control/start", s.handleStartService)
 	mux.HandleFunc("POST /api/control/stop", s.handleStopService)
@@ -354,6 +364,9 @@ func (s *server) registerAdmin(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/cooldowns", s.handleCooldowns)
 	mux.HandleFunc("DELETE /api/accounts/{id}/cooldowns/{scope}", s.handleClearCooldown)
 	mux.HandleFunc("GET /api/requests", s.handleRequests)
+	if s.config.Product != nil {
+		mux.HandleFunc("GET /api/requests/{id}/timing", s.handleRequestTiming)
+	}
 	mux.HandleFunc("POST /api/requests/{id}/cancel", s.handleCancelRequest)
 	mux.HandleFunc("GET /api/events", s.handleAdminEvents)
 }

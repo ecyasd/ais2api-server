@@ -18,6 +18,8 @@ import (
 	"github.com/Mag1cFall/AIStudio2API/internal/aistudio"
 	"github.com/Mag1cFall/AIStudio2API/internal/api"
 	"github.com/Mag1cFall/AIStudio2API/internal/config"
+	"github.com/Mag1cFall/AIStudio2API/internal/product"
+	"github.com/Mag1cFall/AIStudio2API/internal/telemetry"
 )
 
 // newRuntime 装配单个生成服务实例
@@ -27,12 +29,16 @@ func newRuntime(
 	cfg config.Config,
 	requests *requestRegistry,
 ) (*trackedService, *runtimeAdmin, func() error, error) {
+	cfg = product.Constrain(cfg)
 	if err := launchCtx.Err(); err != nil {
 		return nil, nil, nil, err
 	}
 	startedAt := time.Now()
 	requests.log("service", "INFO", "运行时装配 | 1/3 | 载入账户")
 	store := aistudio.NewAccountStore(strings.Split(cfg.AuthStates, ",")...)
+	store.OnLoadError = func(id string) {
+		requests.log("auth", "WARN", "账户文件损坏，已隔离 | 账户="+id)
+	}
 	accounts, err := store.Load()
 	if err != nil {
 		return nil, nil, nil, err
@@ -1450,7 +1456,11 @@ func (service *trackedService) acquireWarmLease(ctx context.Context, selection a
 				continue
 			}
 			workersChanged := service.workers.schedulingChanged()
+			initStarted := time.Now()
 			_, promoteErr := service.workers.ensureWorker(aistudio.ContextWithAccountLease(ctx, lease), accountID, selection.ModelID, false, false)
+			initializedIn := time.Since(initStarted)
+			telemetry.Add(ctx, telemetry.Initialize, initializedIn)
+			telemetry.Add(ctx, telemetry.Queue, -initializedIn)
 			if promoteErr == nil {
 				return lease, nil
 			}
@@ -1721,6 +1731,7 @@ func (service *trackedService) Generate(ctx context.Context, request aistudio.Ge
 
 // generateAttempt 是一次上游尝试的账户租约、准备与发送、等待首事件的结果，done 关闭后结果字段可读
 type generateAttempt struct {
+	timingEnd        func(bool)
 	lease            *aistudio.AccountLease
 	selection        aistudio.AccountSelection
 	hedge            bool
@@ -1867,6 +1878,7 @@ func (service *trackedService) generateWithRetry(
 			lease, acquireErr = service.acquireWarmLease(requestCtx, selection, planLimitFallback)
 		}
 		queueDelayed := queueWait.finish()
+		telemetry.Add(requestCtx, telemetry.Queue, time.Since(queueStartedAt))
 		if acquireErr == nil && selection.PreferredChannel == aistudio.ChannelBuild && lease.Channel() != aistudio.ChannelBuild {
 			fallbackReason = "账户 Build 通道冷却或不支持此模型"
 		}
@@ -1996,10 +2008,11 @@ func (service *trackedService) generateWithRetry(
 		close(destination)
 		return
 	}
-	service.forwardEvents(
+	forwardErr := service.forwardEvents(
 		clientCtx, requestCtx, func() { winner.cancel(); cancel() }, request.ID,
 		winner.first, winner.source, destination, winner.lease, winner.copies, winner.activity, modelID,
 	)
+	winner.timingEnd(forwardErr == nil)
 }
 
 // markAttemptAccount 把访问日志与活动请求的执行账户与通道记为该租约
@@ -2040,9 +2053,13 @@ func (service *trackedService) startAttempt(
 	}
 	attemptCtx, cancel := context.WithCancel(requestCtx)
 	attempt.cancel = cancel
+	attempt.timingEnd = telemetry.AttemptStarted(attemptCtx, string(lease.Channel()))
 	go func() {
 		defer close(attempt.done)
 		service.runAttempt(attemptCtx, request, resourceID, modelID, fallbackReason, attempt)
+		if attempt.err != nil {
+			attempt.timingEnd(false)
+		}
 	}()
 	return attempt
 }
@@ -2124,6 +2141,9 @@ func (service *trackedService) runAttempt(
 		))
 	}
 	prepareElapsed := time.Since(prepareStartedAt)
+	_, signing, headers := prepareTiming.snapshot(time.Now())
+	telemetry.Add(ctx, telemetry.Signing, signing)
+	telemetry.Add(ctx, telemetry.Upstream, headers)
 	if prepareWait.finish() {
 		_, waa, responseHeader := prepareTiming.snapshot(time.Now())
 		service.requests.logRequestProgress(request.ID, accountLabel, "INFO", fmt.Sprintf(
@@ -2491,7 +2511,7 @@ func (service *trackedService) forwardEvents(
 	temporaryCopies *aistudio.TemporaryFileCopies,
 	activity *upstreamActivity,
 	requestedModelID string,
-) {
+) (finalErr error) {
 	state := "completed"
 	var requestErr error
 	terminal := false
@@ -2540,7 +2560,9 @@ func (service *trackedService) forwardEvents(
 			}
 		}
 		api.SetAccessLogError(requestCtx, requestErr)
+		finalErr = requestErr
 		service.requests.finish(requestID, state)
+		telemetry.CleanupDone(requestCtx, false)
 		close(destination)
 	}()
 	pendingFirst := true

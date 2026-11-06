@@ -380,6 +380,9 @@ type AccountCandidateState struct {
 // AccountStore 从一个或多个账户文件或目录加载账户
 type AccountStore struct {
 	paths []string
+	// OnLoadError isolates unreadable accounts without changing their files.
+	// A nil callback preserves upstream's fail-fast behavior for other callers.
+	OnLoadError func(accountID string)
 }
 
 // AccountPool 在账户之间执行能力与并发槽位调度
@@ -518,6 +521,10 @@ func (s *AccountStore) Load() ([]*Account, error) {
 	for _, directory := range directories {
 		account, err := loadAccount(directory)
 		if err != nil {
+			if s.OnLoadError != nil {
+				s.OnLoadError(filepath.Base(directory))
+				continue
+			}
 			return nil, err
 		}
 		if _, exists := ids[account.ID]; exists {
@@ -1523,6 +1530,9 @@ func (l *AccountLease) SaveStorageState(state StorageState) error {
 	}
 	l.account.storageMu.Lock()
 	defer l.account.storageMu.Unlock()
+	if l.staleAuthentication() {
+		return nil
+	}
 	if err := WriteStorageState(l.account.StoragePath, state); err != nil {
 		return err
 	}
@@ -1705,6 +1715,9 @@ func (l *AccountLease) ReplaceCookies(cookies []StateCookie) error {
 	}
 	l.account.storageMu.Lock()
 	defer l.account.storageMu.Unlock()
+	if l.staleAuthentication() {
+		return nil
+	}
 	state, err := LoadStorageState(l.account.StoragePath)
 	if err != nil {
 		return err
@@ -1802,6 +1815,9 @@ func (l *AccountLease) MergeSetCookieHeaders(headers []string, requestURL string
 	}
 	l.account.storageMu.Lock()
 	defer l.account.storageMu.Unlock()
+	if l.staleAuthentication() {
+		return nil
+	}
 	state, err := LoadStorageState(l.account.StoragePath)
 	if err != nil {
 		return err
@@ -1816,6 +1832,14 @@ func (l *AccountLease) MergeSetCookieHeaders(headers []string, requestURL string
 	l.account.StorageState = state
 	l.pool.mu.Unlock()
 	return nil
+}
+
+// staleAuthentication is called with operation and storageMu held. A response
+// started before a refresh may not restore the previous credential snapshot.
+func (l *AccountLease) staleAuthentication() bool {
+	l.pool.mu.Lock()
+	defer l.pool.mu.Unlock()
+	return !l.exclusive && l.authGeneration != l.account.authGeneration
 }
 
 // Release 释放账户文件和进程内租约

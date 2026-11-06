@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
+import { product } from '@/product'
 import { maskKey, splitKeys } from '@/apikey'
 import { keepPage } from '@/desktop'
 import { channelLabelKey, useI18n, type TranslationKey } from '@/i18n'
@@ -130,7 +131,7 @@ const section = useQueryParam<SectionID>(
 )
 const current = computed(() => sections.find((item) => item.id === section.value)!)
 
-const upstreamChannelOptions: UpstreamChannel[] = ['playground', 'build']
+const upstreamChannelOptions: UpstreamChannel[] = ['playground']
 const inputClass =
   'w-full rounded-md border border-line bg-canvas px-3 py-2 text-sm text-white transition focus:border-blue-500 focus:outline-none'
 
@@ -460,6 +461,7 @@ async function saveConfig(): Promise<void> {
               </p>
             </SettingRow>
             <SettingRow
+              v-if="product.extraProtocols"
               :label="t('settings.previewListen')"
               control-id="setting-preview-listen"
               :description="t('settings.previewListenHelp')"
@@ -562,6 +564,7 @@ async function saveConfig(): Promise<void> {
               />
             </SettingRow>
             <SettingRow
+              v-if="product.extraProtocols"
               :label="t('settings.mediaOutput')"
               control-id="setting-media-output"
               :description="t('settings.mediaOutputHelp')"
@@ -575,7 +578,7 @@ async function saveConfig(): Promise<void> {
               </UiSelect>
             </SettingRow>
             <SettingRow
-              v-if="form.media_output === 'url'"
+              v-if="product.extraProtocols && form.media_output === 'url'"
               :label="t('settings.mediaBaseURL')"
               control-id="setting-media-base-url"
               :description="t('settings.mediaBaseURLHelp')"
@@ -641,7 +644,7 @@ async function saveConfig(): Promise<void> {
                 :class="inputClass"
                 type="number"
                 min="1"
-                :max="form.max_active_workers"
+                :max="Math.min(form.max_active_workers, product.startupConcurrency)"
               />
             </SettingRow>
             <SettingRow
@@ -677,6 +680,7 @@ async function saveConfig(): Promise<void> {
 
           <template v-else-if="section === 'upstream'">
             <SettingRow
+              v-if="product.extraProtocols"
               :label="t('settings.upstreamChannels')"
               group-id="setting-channels"
               :description="t('settings.upstreamChannelsHelp')"
@@ -734,6 +738,7 @@ async function saveConfig(): Promise<void> {
               />
             </SettingRow>
             <SettingRow
+              v-if="product.extraProtocols"
               :label="t('settings.modelChannels')"
               group-id="setting-model-channels"
               :description="t('settings.modelChannelsHelp')"
@@ -754,6 +759,7 @@ async function saveConfig(): Promise<void> {
               />
             </SettingRow>
             <SettingRow
+              v-if="product.extraProtocols"
               :label="t('settings.buildNative')"
               control-id="setting-build-native"
               :description="t('settings.buildNativeHelp')"
@@ -774,6 +780,7 @@ async function saveConfig(): Promise<void> {
               <UiSwitch id="setting-nonstream-keepalive" v-model="form.nonstream_keepalive" />
             </SettingRow>
             <SettingRow
+              v-if="product.extraProtocols"
               :label="t('settings.fakeStream')"
               control-id="setting-fake-stream"
               :description="t('settings.fakeStreamHelp')"
@@ -841,6 +848,7 @@ async function saveConfig(): Promise<void> {
               />
             </SettingRow>
             <SettingRow
+              v-if="product.extraProtocols"
               :label="t('settings.stripThoughtSignatures')"
               control-id="setting-strip-thought-signatures"
               :description="t('settings.stripThoughtSignaturesHelp')"
@@ -854,6 +862,7 @@ async function saveConfig(): Promise<void> {
               />
             </SettingRow>
             <SettingRow
+              v-if="product.extraProtocols"
               :label="t('settings.waaBackend')"
               control-id="setting-waa-backend"
               :description="t('settings.waaBackendHelp')"
@@ -895,6 +904,7 @@ async function saveConfig(): Promise<void> {
               />
             </SettingRow>
             <SettingRow
+              v-if="product.extraProtocols"
               :label="t('settings.firstEventHedge')"
               control-id="setting-first-event-hedge"
               :description="t('settings.firstEventHedgeHelp')"
@@ -923,6 +933,7 @@ async function saveConfig(): Promise<void> {
               <p v-if="hedgeHint" class="mt-2 text-xs leading-5 text-gray-500">{{ hedgeHint }}</p>
             </SettingRow>
             <SettingRow
+              v-if="product.extraProtocols"
               :label="t('settings.firstEventHedgeModels')"
               group-id="setting-first-event-hedge-models"
               :description="t('settings.firstEventHedgeModelsHelp')"
@@ -995,6 +1006,7 @@ async function saveConfig(): Promise<void> {
 
           <template v-else>
             <SettingRow
+              v-if="product.extraProtocols"
               :label="t('settings.adminAuth')"
               control-id="setting-admin-auth"
               :description="t('settings.adminAuthHelp')"
@@ -1039,6 +1051,7 @@ async function saveConfig(): Promise<void> {
               </SettingRow>
             </template>
             <SettingRow
+              v-if="product.extraProtocols"
               :label="t('settings.requestBodyLog')"
               control-id="setting-body-log"
               :description="t('settings.requestBodyLogHelp')"

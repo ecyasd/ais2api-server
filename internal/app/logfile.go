@@ -8,6 +8,7 @@ import (
 
 	"github.com/Mag1cFall/AIStudio2API/internal/config"
 	"github.com/Mag1cFall/AIStudio2API/internal/i18n"
+	"github.com/Mag1cFall/AIStudio2API/internal/telemetry"
 )
 
 // logFileName 是日志目录中当前日志文件的名称
@@ -44,11 +45,14 @@ func (output *logOutput) set(enabled bool, maxTotalMB int) error {
 
 // Write 把一条日志按系统语言写到标准错误，按原文写到日志文件
 func (output *logOutput) Write(data []byte) (int, error) {
+	original := len(data)
+	data = telemetry.JSONLog(data)
 	i18n.Stderr.Write(data)
 	output.mu.Lock()
 	defer output.mu.Unlock()
 	if output.file != nil {
-		return output.file.Write(data)
+		_, err := output.file.Write(data)
+		return original, err
 	}
-	return len(data), nil
+	return original, nil
 }

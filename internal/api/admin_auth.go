@@ -163,6 +163,10 @@ func (auth *adminAuth) requireSession(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		if auth.config.Product != nil && auth.config.AdminPassword != "" && subtle.ConstantTimeCompare([]byte(bearerToken(r.Header.Get("Authorization"))), []byte(auth.config.AdminPassword)) == 1 {
+			next.ServeHTTP(w, r)
+			return
+		}
 		session := auth.session(r)
 		if session == nil {
 			writeAdminError(w, http.StatusUnauthorized, "admin_login_required", "Sign in to the console")

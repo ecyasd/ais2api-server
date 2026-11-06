@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Mag1cFall/AIStudio2API/internal/aistudio"
+	"github.com/Mag1cFall/AIStudio2API/internal/telemetry"
 )
 
 type accessLogContextKey struct{}
@@ -371,7 +372,7 @@ func requestLoggingMiddleware(admin AdminService, next http.Handler) http.Handle
 		started := time.Now()
 		metadata := &accessLogMetadata{admin: admin, method: r.Method, path: r.URL.Path, requestID: newID("req"), startedAt: started}
 		writer := &accessLogResponseWriter{ResponseWriter: w, metadata: metadata}
-		request := r.WithContext(context.WithValue(r.Context(), accessLogContextKey{}, metadata))
+		request := r.WithContext(telemetry.WithTrace(context.WithValue(r.Context(), accessLogContextKey{}, metadata), started))
 		next.ServeHTTP(writer, request)
 		if admin == nil {
 			return
@@ -381,6 +382,7 @@ func requestLoggingMiddleware(admin AdminService, next http.Handler) http.Handle
 			status = http.StatusOK
 		}
 		entry := metadata.finished(status, errors.Is(r.Context().Err(), context.Canceled))
+		entry.Trace = telemetry.From(request.Context())
 		entry.Latency, entry.Method, entry.Path = time.Since(started), r.Method, r.URL.Path
 		admin.RecordAccessLog(entry)
 	})

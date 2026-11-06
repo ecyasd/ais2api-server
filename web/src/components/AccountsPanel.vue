@@ -34,6 +34,8 @@ import UiCollapse from './UiCollapse.vue'
 import UiIcon from './UiIcon.vue'
 import UiPager from './UiPager.vue'
 import UiSelect from './UiSelect.vue'
+import { product } from '@/product'
+import ServerImportDialog from './ServerImportDialog.vue'
 
 // CookieCandidate 是 Cookie 中识别出的账户，source 为所在 Cookie 来源的序号
 type CookieCandidate = CookieBrowser & { source: number }
@@ -60,6 +62,7 @@ const showEditor = ref(false)
 const showBrowserLogin = ref(false)
 const showChromeImport = ref(false)
 const showCookieImport = ref(false)
+const showServerImport = ref(false)
 const cookieText = ref('')
 // cookieFiles 是粘贴 Cookie 对话框中选择的 Cookie 文件，选择后代替粘贴的文本，每个文件单独识别与导入
 const cookieFiles = ref<{ name: string; text: string }[]>([])
@@ -689,7 +692,10 @@ const addMethods = computed<
     label: 'accounts.pasteCookie',
     help: 'accounts.pasteCookieHelp',
     icon: 'cookie',
-    action: () => (showCookieImport.value = true),
+    action: () => {
+      if (product.browserLogin) showCookieImport.value = true
+      else showServerImport.value = true
+    },
   },
   {
     label: 'accounts.readBrowser',
@@ -854,6 +860,11 @@ async function refreshAllAccounts(): Promise<void> {
   <section
     class="flex min-h-0 flex-1 flex-col overflow-auto max-md:[scrollbar-gutter:stable] md:overflow-hidden"
   >
+    <ServerImportDialog
+      v-if="showServerImport"
+      @close="showServerImport = false"
+      @saved="emit('refresh')"
+    />
     <header
       class="flex flex-wrap items-center gap-3 border-b border-line px-4 py-4 md:px-[max(2rem,calc((100%_-_var(--container-6xl))/2_+_2rem))]"
     >
@@ -902,7 +913,11 @@ async function refreshAllAccounts(): Promise<void> {
               class="z-[60] max-h-[var(--reka-dropdown-menu-content-available-height)] w-72 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-line bg-panel p-1 shadow-xl"
             >
               <DropdownMenuItem
-                v-for="item in addMethods"
+                v-for="item in addMethods.filter(
+                  (method) =>
+                    product.browserLogin ||
+                    ['accounts.pasteCookie', 'accounts.remoteAdd'].includes(method.label),
+                )"
                 :key="item.label"
                 :disabled="item.disabled ?? false"
                 class="group flex cursor-pointer items-start gap-3 rounded-md px-3 py-2.5 text-left outline-none data-[disabled]:cursor-default data-[highlighted]:bg-raised"
@@ -1210,6 +1225,7 @@ async function refreshAllAccounts(): Promise<void> {
                 :aria-busy="
                   pendingAction === `login:${account.id}` || reloggingAccounts.has(account.id)
                 "
+                v-if="product.browserLogin"
                 @click="loginAccount(account)"
               >
                 {{ t('common.relogin') }}

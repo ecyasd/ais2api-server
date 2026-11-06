@@ -22,6 +22,10 @@ func requestLogData(entry api.AccessLog) *api.RequestLog {
 		QueueMS: float64(entry.QueueWait) / float64(time.Millisecond), ProofMS: float64(entry.Proof) / float64(time.Millisecond),
 		Channel: entry.Channel,
 	}
+	if entry.Trace != nil {
+		timing := entry.Trace.Snapshot()
+		data.Timing = &timing
+	}
 	if entry.Generation {
 		data.Parameters = map[string]string{
 			"temperature": entry.Temperature, "top_p": entry.TopP,

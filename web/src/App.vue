@@ -27,6 +27,7 @@ import { readPreference, writePreference } from '@/preference'
 import { useTabParam } from '@/url'
 import { useRoute, useRouter } from 'vue-router'
 import type { IconName } from '@/icons'
+import { product } from '@/product'
 
 const { availableLocales, locale, setLocale, t, logText } = useI18n()
 // lazyPanel 创建按需加载的页面组件
@@ -46,7 +47,11 @@ function lazyPanel(loader: AsyncComponentLoader) {
 }
 const UsagePanel = lazyPanel(() => import('@/components/UsagePanel.vue'))
 const VersionPanel = lazyPanel(() => import('@/components/VersionPanel.vue'))
-const AccessPanel = lazyPanel(() => import('@/components/AccessPanel.vue'))
+const AccessPanel = lazyPanel(() =>
+  product.extraProtocols
+    ? import('@/components/AccessPanel.vue')
+    : import('@/components/ServerAccessPanel.vue'),
+)
 const validTabs: TabID[] = [
   'logs',
   'accounts',
@@ -238,7 +243,7 @@ onMounted(revealCurrentTab)
           ></span>
         </span>
         <h1 class="relative top-px min-w-0 flex-1 truncate text-base font-bold text-white">
-          AIStudio2API
+          {{ product.name }}
         </h1>
         <div class="flex shrink-0 items-center gap-1">
           <ThemeToggle />
@@ -296,7 +301,7 @@ onMounted(revealCurrentTab)
         class="flex w-full min-w-0 gap-1 overflow-x-auto p-2 [grid-area:nav] md:flex-col md:overflow-x-hidden md:overflow-y-auto"
       >
         <button
-          v-for="item in navigation"
+          v-for="item in navigation.filter((item) => product.studio || item.id !== 'playground')"
           :key="item.id"
           :class="[
             'flex w-auto shrink-0 items-center gap-2 rounded-md px-3 py-2 text-left whitespace-nowrap transition md:w-full',

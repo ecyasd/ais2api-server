@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import App from './App.vue'
 import { afterTask } from './lazy'
+import { product } from './product'
 
 declare module 'vue-router' {
   // RouteMeta 中 studio 表示 API 试用页，其余路由为管理端主页面
@@ -67,4 +68,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
 
-export const router = createRouter({ history: createWebHistory(), routes })
+export const router = createRouter({
+  history: createWebHistory(),
+  routes: routes.filter((route) => product.studio || !route.meta?.studio),
+})

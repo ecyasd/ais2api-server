@@ -11,8 +11,10 @@ import (
 	"github.com/Mag1cFall/AIStudio2API/internal/api"
 	"github.com/Mag1cFall/AIStudio2API/internal/camoufoxnative"
 	"github.com/Mag1cFall/AIStudio2API/internal/config"
+	"github.com/Mag1cFall/AIStudio2API/internal/product"
 	"github.com/Mag1cFall/AIStudio2API/internal/promptdb"
 	"github.com/Mag1cFall/AIStudio2API/internal/requestdb"
+	"github.com/Mag1cFall/AIStudio2API/internal/telemetry"
 )
 
 // managedService 表示可整体替换的生成服务
@@ -182,6 +184,7 @@ func (manager *runtimeManager) startService(ctx context.Context) (api.AdminStatu
 		return api.AdminStatus{}, err
 	}
 	manager.overrides.Apply(&cfg)
+	cfg = product.Constrain(cfg)
 	if err := cfg.Validate(); err != nil {
 		manager.finishStart(launchCancel)
 		return api.AdminStatus{}, err
@@ -541,16 +544,24 @@ func (manager *runtimeManager) UpdateRuntimeConfig(ctx context.Context, value ap
 	manager.mu.Lock()
 	updated, err := manager.current.admin.UpdateRuntimeConfig(ctx, value)
 	if err == nil {
+		manager.activeManagement.ProxyAPIKey = updated.APIKey
 		manager.current.service.SetAPIKeyAccounts(apiKeyAccounts(updated.APIKey, updated.APIKeyAccounts, manager.activeManagement))
 		manager.current.service.ApplyCapacity(
 			updated.WarmWorkerLimit, updated.MaxActiveWorkers, updated.WarmStartupConcurrency, updated.PerAccountConcurrency,
 		)
 		updated = manager.decorateRuntimeConfig(updated, manager.current.config)
-		manager.ledger.SetBodyCapture(updated.RequestBodyLog)
+		manager.ledger.SetBodyCapture(product.Server().BodyCapture && updated.RequestBodyLog)
 		err = manager.logs.set(updated.LogFile, updated.LogMaxTotalMB)
 	}
 	manager.mu.Unlock()
 	return updated, err
+}
+
+// modelAPIKeys observes successful management changes without a process restart.
+func (manager *runtimeManager) modelAPIKeys() string {
+	manager.mu.RLock()
+	defer manager.mu.RUnlock()
+	return manager.activeManagement.ProxyAPIKey
 }
 
 // Cooldowns 返回当前生成服务冷却状态
@@ -595,11 +606,18 @@ func (manager *runtimeManager) RecordAccessStart(entry api.AccessLog) {
 
 // RecordAccessLog 记录公开 API 请求结果，通过 API key 校验的 POST 请求同时写入用量账本
 func (manager *runtimeManager) RecordAccessLog(entry api.AccessLog) {
+	if entry.Error != "" {
+		entry.Error = "upstream_failure"
+	}
+	for index := range entry.Attempts {
+		entry.Attempts[index].Error = "upstream_attempt_failed"
+	}
 	manager.mu.RLock()
 	manager.current.admin.RecordAccessLog(entry)
 	manager.mu.RUnlock()
 	if entry.Method == http.MethodPost && entry.Authorized {
 		manager.ledger.Record(requestRow(entry, time.Now().UTC()))
+		entry.Trace.Publish(func(report telemetry.Report) { manager.ledger.RecordTiming(entry.RequestID, report) })
 	}
 }
 
