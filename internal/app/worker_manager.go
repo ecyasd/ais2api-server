@@ -342,16 +342,12 @@ func (manager *accountWorkerManager) reapIdleWorker(before time.Time) bool {
 	if len(manager.openings) > 0 || warm <= manager.warmLimit() {
 		return false
 	}
-	victim := manager.idleWarmVictim("")
-	if victim == "" {
-		return false
+	cutoff := before
+	if warm > manager.activeLimit() {
+		cutoff = time.Time{}
 	}
-	manager.mu.RLock()
-	account := manager.accounts[victim]
-	manager.mu.RUnlock()
-	_, lastUsed := manager.pool.Activity(victim)
-	if warm <= manager.activeLimit() &&
-		(lastUsed.After(before) || account != nil && time.Unix(0, account.readyAt.Load()).After(before)) {
+	victim := manager.idleWarmVictimWithDeadline("", "", false, cutoff)
+	if victim == "" {
 		return false
 	}
 	evicted, err := manager.evictIdleWorker(manager.lifecycle, victim)
@@ -1266,6 +1262,11 @@ func (manager *accountWorkerManager) victimReserved(accountID string) bool {
 
 // idleWarmVictimFor 选择空闲热 Worker，优先冷却中的账户，其次最久未用；coolingOnly 时只返回冷却中的账户
 func (manager *accountWorkerManager) idleWarmVictimFor(excludeID string, modelID string, coolingOnly bool) string {
+	return manager.idleWarmVictimWithDeadline(excludeID, modelID, coolingOnly, time.Time{})
+}
+
+// Apply the idle deadline before ranking cooling accounts for reclamation.
+func (manager *accountWorkerManager) idleWarmVictimWithDeadline(excludeID string, modelID string, coolingOnly bool, before time.Time) string {
 	warm := manager.WarmAccountIDs()
 	var selected string
 	var selectedUsed time.Time
@@ -1282,12 +1283,16 @@ func (manager *accountWorkerManager) idleWarmVictimFor(excludeID string, modelID
 		}
 		account.mu.Lock()
 		cleanupPending := accountWorkerCleanupPending(account)
+		readyAt := time.Unix(0, account.readyAt.Load())
 		account.mu.Unlock()
 		if cleanupPending {
 			continue
 		}
 		busy, lastUsed := manager.pool.Activity(accountID)
 		if busy {
+			continue
+		}
+		if !before.IsZero() && (lastUsed.After(before) || readyAt.After(before)) {
 			continue
 		}
 		cooling := manager.pool.AccountCoolingDown(accountID, modelID)

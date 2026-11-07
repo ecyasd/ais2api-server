@@ -139,12 +139,12 @@ def verify_health(port):
     keys = [key.strip() for key in values.get("PROXY_API_KEY", "").split(",") if key.strip()]
     origin = f"http://127.0.0.1:{port}"
 
-    def status(path, token=None, cookie=None):
+    def status(path, token=None, cookie=None, timeout=5):
         headers = {"Authorization": "Bearer " + token.encode("utf-8", errors="surrogateescape").decode("latin-1")} if token else {}
         if cookie:
             headers["Cookie"] = cookie
         try:
-            with urlopen(Request(origin + path, headers=headers), timeout=5) as response:
+            with urlopen(Request(origin + path, headers=headers), timeout=timeout) as response:
                 return response.status
         except HTTPError as error:
             return error.code
@@ -169,7 +169,21 @@ def verify_health(port):
     assert status("/v1/models") == 401
     if keys:
         assert status("/api/accounts", keys[0]) == 401
-        assert status("/v1/models", keys[0]) in (200, 503)
+        # The listener and login can be ready before the first model catalog.
+        # Wait only for transport readiness; an authentication failure still
+        # fails immediately rather than being accepted or retried as healthy.
+        deadline = time.monotonic() + 45
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise RuntimeError("model-list-readiness-timeout")
+            try:
+                code = status("/v1/models", keys[0], timeout=min(5, remaining))
+            except OSError:
+                time.sleep(min(0.5, remaining))
+                continue
+            assert code in (200, 503)
+            break
     else:
         assert status("/v1/models", "synthetic-denied-token") == 401
 

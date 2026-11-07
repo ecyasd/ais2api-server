@@ -2,8 +2,11 @@ package app
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/Mag1cFall/AIStudio2API/internal/aistudio"
 )
 
 func TestWorkerIdleTimeoutConfiguration(t *testing.T) {
@@ -40,6 +43,44 @@ func TestWorkerIdleTimeoutConfiguration(t *testing.T) {
 				t.Fatalf("retention = %s, want %s", got, test.want)
 			}
 		})
+	}
+}
+
+func TestIdleVictimDeadlineSkipsRecentCoolingAndBusyWorkers(t *testing.T) {
+	now := time.Now()
+	accounts := []*aistudio.Account{}
+	for _, name := range []string{"old", "recent-cooling", "busy"} {
+		id := name + "@fixture.invalid"
+		directory := t.TempDir()
+		accounts = append(accounts, &aistudio.Account{ID: id, Config: aistudio.DefaultAccountConfig(id), State: aistudio.AccountReady,
+			LastUsed: now.Add(-31 * time.Minute), Directory: directory, RuntimePath: filepath.Join(directory, "runtime.json")})
+	}
+	accounts[1].LastUsed = now.Add(-time.Minute)
+	pool := aistudio.NewAccountPool(accounts, 2)
+	if err := pool.MarkCooldownIfGeneration(accounts[1].ID, "", pool.ModelAccessGeneration(accounts[1].ID), now, now.Add(time.Minute), "synthetic cooldown"); err != nil {
+		t.Fatal(err)
+	}
+	manager := newAccountWorkerManager(pool, accounts, newRequestRegistry(t.Context()), "", "", time.Second, 1, 4, 4)
+	t.Cleanup(func() { _ = manager.Close() })
+	for _, account := range accounts {
+		worker := manager.accounts[account.ID]
+		worker.warm.Store(true)
+		worker.readyAt.Store(now.Add(-31 * time.Minute).UnixNano())
+	}
+	busy, err := pool.AcquireAccount(t.Context(), accounts[2].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = busy.Release() })
+	if got := manager.idleWarmVictim(""); got != accounts[1].ID {
+		t.Fatal("fixture does not reproduce cooling priority ahead of expiry")
+	}
+	if got := manager.idleWarmVictimWithDeadline("", "", false, now.Add(-30*time.Minute)); got != accounts[0].ID {
+		t.Fatal("deadline-filtered eviction did not select the expired idle account")
+	}
+	manager.accounts[accounts[0].ID].readyAt.Store(now.UnixNano())
+	if got := manager.idleWarmVictimWithDeadline("", "", false, now.Add(-30*time.Minute)); got != "" {
+		t.Fatal("newly prepared, recent or busy runtime was eligible for idle eviction")
 	}
 }
 
