@@ -3,6 +3,8 @@ name: Fixed Server Release
 on:
   push:
     tags: ['server-v*']
+    branches: [main]
+    paths: ['deploy/release-request.json']
 
 permissions:
   contents: read
@@ -15,20 +17,94 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      actions: write
     steps:
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           name: server-linux-amd64
           path: dist
-      - name: Publish fixed candidate
+      - name: Publish verified fixed candidate
+        id: fixed
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REF_TYPE: ${{ github.ref_type }}
+          RELEASE_REF_NAME: ${{ github.ref_name }}
           RELEASE_COMMIT: ${{ github.sha }}
         run: |
-          cd dist
-          sha256sum aistudio2api server-image.tar.gz > SHA256SUMS
-          printf '{"repository":"%s","commit":"%s","base":"80847a7665c442a238918c957963217773f36291","platform":"linux/amd64","managedBy":"ais2api-server"}\n' "$GH_REPO" "$RELEASE_COMMIT" > provenance.json
-          printf 'Fixed Linux amd64 candidate from %s. Offline contracts and isolated server checks passed. Live SillyTavern, migration and latency acceptance are separate promotion gates.\n' "$RELEASE_COMMIT" > release-notes.txt
-          gh release create "$RELEASE_TAG" --verify-tag --prerelease --target "$RELEASE_COMMIT" --title "$RELEASE_TAG" --notes-file release-notes.txt aistudio2api server-image.tar.gz SHA256SUMS provenance.json
+          python3 - <<'PY'
+          import hashlib, json, os, re, subprocess
+          from pathlib import Path
+
+          def gh_json(*args):
+              return json.loads(subprocess.check_output(['gh', *args]))
+
+          repo, commit = os.environ['GH_REPO'], os.environ['RELEASE_COMMIT']
+          deploy = False
+          if os.environ['RELEASE_REF_TYPE'] == 'tag':
+              tag = os.environ['RELEASE_REF_NAME']
+          else:
+              assert os.environ['RELEASE_REF_NAME'] == 'main'
+              request = json.loads(Path('deploy/release-request.json').read_text())
+              assert set(request) == {'tag', 'deploy'}
+              assert type(request['deploy']) is bool
+              tag, deploy = request['tag'], request['deploy']
+              main = gh_json('api', f'repos/{repo}/git/ref/heads/main')
+              assert main['object']['sha'] == commit, 'Main advanced; do not publish or deploy stale code'
+          assert isinstance(tag, str) and re.fullmatch(r'server-v[0-9][0-9A-Za-z.+-]{0,79}', tag)
+          assert re.fullmatch(r'[0-9a-f]{40}', commit)
+
+          dist = Path('dist')
+          sums = []
+          for name in ('aistudio2api', 'server-image.tar.gz'):
+              with (dist / name).open('rb') as source:
+                  sums.append(hashlib.file_digest(source, 'sha256').hexdigest() + '  ' + name)
+          (dist / 'SHA256SUMS').write_text('\n'.join(sums) + '\n')
+          (dist / 'provenance.json').write_text(json.dumps({
+              'repository': repo, 'commit': commit,
+              'base': '80847a7665c442a238918c957963217773f36291',
+              'platform': 'linux/amd64', 'managedBy': 'ais2api-server',
+          }) + '\n')
+          (dist / 'release-notes.txt').write_text(
+              f'Fixed Linux amd64 candidate from {commit}. Offline contracts and isolated server checks passed. '
+              'Keeps one warm account; surplus workers default to 30 minutes idle retention, configurable via WORKER_IDLE_TIMEOUT. '
+              'Live Google session and latency acceptance are separate from offline checks.\n')
+
+          endpoint = f'repos/{repo}/releases/tags/{tag}'
+          lookup = subprocess.run(['gh', 'api', '--silent', endpoint], capture_output=True)
+          if lookup.returncode == 0:
+              existing = gh_json('api', endpoint)
+              assert not existing['draft'] and existing['target_commitish'] == commit, 'Never replace a different release'
+              names = {item['name'] for item in existing['assets']}
+              assert {'aistudio2api', 'server-image.tar.gz', 'SHA256SUMS', 'provenance.json'} <= names
+          else:
+              # Refuse authentication/network errors instead of treating them as a missing release.
+              assert b'HTTP 404' in lookup.stderr, 'Could not verify release existence'
+              args = ['gh', 'release', 'create', tag, '--target', commit, '--prerelease', '--title', tag,
+                      '--notes-file', str(dist / 'release-notes.txt')]
+              if os.environ['RELEASE_REF_TYPE'] == 'tag':
+                  args.append('--verify-tag')
+              args.extend(str(dist / name) for name in ('aistudio2api', 'server-image.tar.gz', 'SHA256SUMS', 'provenance.json'))
+              subprocess.run(args, check=True)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'tag={tag}\ndeploy={str(deploy).lower()}\n')
+          PY
+      - name: Request existing private promotion
+        if: steps.fixed.outputs.deploy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.fixed.outputs.tag }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          repo, commit = os.environ['GH_REPO'], os.environ['RELEASE_COMMIT']
+          main = json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/git/ref/heads/main']))
+          assert main['object']['sha'] == commit, 'Main advanced; private promotion not requested'
+          payload = json.dumps({'ref': 'main', 'inputs': {'release_tag': os.environ['RELEASE_TAG']}})
+          subprocess.run(['gh', 'api', '--method', 'POST', f'repos/{repo}/actions/workflows/server-deploy.yml/dispatches',
+                          '--input', '-'], input=payload.encode(), check=True)
+          print('Existing private deployment workflow requested for the verified fixed release.')
+          PY
