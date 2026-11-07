@@ -323,6 +323,7 @@ func SetAccessLogError(ctx context.Context, err error) {
 	if err == nil {
 		return
 	}
+	telemetry.SetFailure(ctx, failureDiagnostic(err))
 	if metadata, ok := ctx.Value(accessLogContextKey{}).(*accessLogMetadata); ok {
 		metadata.mu.Lock()
 		metadata.err = strings.TrimSpace(err.Error())

@@ -26,6 +26,15 @@ type Attempt struct {
 	State      string  `json:"state"`
 }
 
+// Failure contains fixed categories and numeric codes, never an error payload.
+type Failure struct {
+	Kind       string `json:"kind"`
+	Method     string `json:"method,omitempty"`
+	HTTPStatus int    `json:"http_status"`
+	RPCCode    int64  `json:"rpc_code,omitempty"`
+	Reason     string `json:"reason"`
+}
+
 type Report struct {
 	Revision          uint64            `json:"revision"`
 	StartedAt         time.Time         `json:"started_at"`
@@ -43,6 +52,7 @@ type Report struct {
 	Attempts          []Attempt         `json:"attempts"`
 	Rounds            []Attempt         `json:"upstream_rounds"`
 	OmittedAttempts   int               `json:"omitted_attempts"`
+	Failure           *Failure          `json:"failure,omitempty"`
 }
 
 type Trace struct {
@@ -71,7 +81,20 @@ func (trace *Trace) snapshotLocked() Report {
 	}
 	report.Attempts = slices.Clone(report.Attempts)
 	report.Rounds = slices.Clone(report.Rounds)
+	if report.Failure != nil {
+		failure := *report.Failure
+		report.Failure = &failure
+	}
 	return report
+}
+
+// SetFailure preserves a safe final diagnosis before raw errors are discarded.
+func SetFailure(ctx context.Context, failure Failure) {
+	if trace := From(ctx); trace != nil {
+		trace.mu.Lock()
+		trace.report.Failure = &failure
+		trace.mu.Unlock()
+	}
 }
 
 func RoundStarted(ctx context.Context) func(bool) {
