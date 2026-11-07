@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: server-ci-${{ github.ref }}
+  group: server-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:

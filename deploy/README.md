@@ -42,6 +42,9 @@ When `host_deploy.py` changes, install the reviewed updater separately before
 promotion; replacing the server image does not update the host script. Health
 checks use the native default username when it is omitted from `.env`, while
 preserving explicitly configured usernames. Credential values are not printed.
+The valid-key model-list check allows up to 45 seconds for initial catalog
+transport readiness after health/login become available; authentication denials
+still fail immediately.
 Before changing the existing stack's repository trust, retire any legacy updater
 entry points referenced by retained SSM document versions. Historical versions
 must not provide a path back to the old product or repository.

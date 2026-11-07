@@ -10,6 +10,16 @@ from unittest.mock import MagicMock, patch
 
 
 class NativeEnvTests(unittest.TestCase):
+    def test_health_waits_for_initial_model_catalog_timeout(self):
+        # Health/login can be ready before the initial model directory query.
+        self.assert_health_username("", "admin", model_timeouts=1)
+
+    def test_model_catalog_readiness_wait_is_bounded(self):
+        import host_deploy as deployer
+        with patch.object(deployer.time, "monotonic", side_effect=[0, 0, 46]):
+            with self.assertRaisesRegex(RuntimeError, "model-list-readiness-timeout"):
+                self.assert_health_username("", "admin", model_timeouts=2)
+
     def test_native_env_values_preserve_valid_credentials(self):
         import host_deploy as deployer
         with tempfile.TemporaryDirectory() as temporary:
@@ -25,7 +35,7 @@ class NativeEnvTests(unittest.TestCase):
     def test_health_check_preserves_custom_username(self):
         self.assert_health_username("ADMIN_USERNAME=synthetic-owner\n", "synthetic-owner")
 
-    def assert_health_username(self, username_line, expected_username):
+    def assert_health_username(self, username_line, expected_username, model_timeouts=0):
         import host_deploy as deployer
         with tempfile.TemporaryDirectory() as temporary:
             data = Path(temporary)
@@ -34,8 +44,10 @@ class NativeEnvTests(unittest.TestCase):
                 encoding="utf-8",
             )
             logins = []
+            model_reads = 0
 
             def http(request, timeout):
+                nonlocal model_reads
                 response = MagicMock()
                 response.__enter__.return_value = response
                 path = request.full_url.removeprefix("http://127.0.0.1:2049")
@@ -51,10 +63,13 @@ class NativeEnvTests(unittest.TestCase):
                 elif path == "/api/accounts" and cookie == "synthetic-session=ok":
                     response.status = 200
                 elif path == "/v1/models" and token == "Bearer synthetic-model-key":
+                    model_reads += 1
+                    if model_reads <= model_timeouts:
+                        raise TimeoutError("synthetic model directory still initializing")
                     response.status = 200
                 return response
 
-            with patch.object(deployer, "DATA", data), patch.object(deployer, "urlopen", http):
+            with patch.object(deployer, "DATA", data), patch.object(deployer, "urlopen", http), patch.object(deployer.time, "sleep"):
                 deployer.verify_health(2049)
             self.assertEqual(logins, [{"username": expected_username, "password": "synthetic-password"}])
 
