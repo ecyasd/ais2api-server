@@ -8,8 +8,5 @@
   "bodyCapture": false,
   "engine": "spidermonkey",
   "channels": ["playground"],
-  "warmWorkers": 1,
-  "activeWorkers": 2,
-  "startupConcurrency": 1,
   "managedBy": "ais2api-server"
 }

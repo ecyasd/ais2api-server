@@ -51,6 +51,30 @@ export function formatLogNumber(value: number, locale: string, digits = 0): stri
   return format.format(value)
 }
 
+// RequestLatencyMetric 区分首个上游事件与发给客户端的正文首字，缺失正文不会回退到首事件
+interface RequestLatencyMetric {
+  label: 'logs.firstEvent' | 'logs.firstBody'
+  milliseconds: number | null
+}
+
+export function requestLatencyMetrics(
+  request: Pick<NonNullable<AdminLog['request']>, 'first_event_ms' | 'timing'>,
+): RequestLatencyMetric[] {
+  const metrics: RequestLatencyMetric[] = []
+  if (request.first_event_ms != null) {
+    metrics.push({ label: 'logs.firstEvent', milliseconds: request.first_event_ms })
+  }
+  if (request.timing != null) {
+    metrics.push({ label: 'logs.firstBody', milliseconds: request.timing.first_body_ms })
+  }
+  return metrics
+}
+
+// formatLogLatency 保留缺失值与实际零值的区别，统一按秒显示延迟
+export function formatLogLatency(value: number | null | undefined, locale: string): string {
+  return value == null ? '—' : `${formatLogNumber(value / 1000, locale, 2)} s`
+}
+
 // prettyBody 缩进 JSON 正文，非 JSON 保持原文
 export function prettyBody(text: string): string {
   try {

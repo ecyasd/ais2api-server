@@ -223,7 +223,8 @@ export const messages: Record<TranslationKey, string> = {
   'logs.reply': 'Réponse',
   'logs.outputTotal': 'Total en sortie',
   'logs.averageSpeed': 'Vitesse moyenne',
-  'logs.firstToken': 'Premier jeton',
+  'logs.firstEvent': 'Premier événement',
+  'logs.firstBody': 'Premier texte de réponse',
   'logs.details': 'Détails',
   'logs.endpoint': 'Point de terminaison',
   'logs.inputTokens': 'Jetons en entrée',
@@ -295,7 +296,7 @@ export const messages: Record<TranslationKey, string> = {
   'settings.requestTimeout': 'Délai de requête',
   'settings.warmWorkerLimit': 'Workers préchauffés',
   'settings.maxActiveWorkers': 'Limite de workers en pointe',
-  'settings.warmStartupConcurrency': 'Démarrages Camoufox simultanés',
+  'settings.warmStartupConcurrency': 'Démarrages simultanés des workers',
   'settings.perAccountConcurrency': 'Requêtes simultanées par compte',
   'settings.routingStrategy': 'Stratégie de sélection des comptes',
   'settings.routingRoundRobin': 'Tourniquet',
@@ -1618,7 +1619,8 @@ export const messages: Record<TranslationKey, string> = {
   'settings.warmWorkerLimitHelp':
     'Nombre de comptes maintenus préchauffés après le démarrage du service de génération.',
   'settings.maxActiveWorkersHelp': 'Nombre maximal de workers actifs en pointe',
-  'settings.warmStartupConcurrencyHelp': 'Workers Camoufox démarrant à froid simultanément',
+  'settings.warmStartupConcurrencyHelp':
+    'Nombre de workers démarrant à froid en même temps (SpiderMonkey et Camoufox)',
   'settings.perAccountConcurrencyHelp': 'Nombre de requêtes qu’un compte traite en même temps.',
   'settings.buildNativeHelp':
     'Les requêtes sans streaming utilisent Build en priorité, sinon Playground',

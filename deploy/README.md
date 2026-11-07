@@ -7,10 +7,10 @@ account/state formats are retained intentionally.
 
 ## Build and release
 
-`Server CI` runs frontend type, lint, format and production build checks; all
+`Server CI` runs frontend timing tests, type, lint, format and production build checks; all
 upstream Go unit tests and vet; dedicated tool/account/telemetry contracts; backup
 recovery checks; a static Linux binary build; isolated process restart/auth/import
-acceptance; and the browser-free Docker image build. All synthetic tests use
+acceptance; and the server Docker image build with offline login dependency checks. All synthetic tests use
 separate temporary directories. The process smoke test points its outbound proxy
 at a closed loopback port and never starts generation.
 
@@ -38,6 +38,10 @@ image selection is `/etc/ais2api-server/image.env`, and the existing protected
 `aistudio-api.service` unit controls the new server. Its traffic start gate and
 the host traffic timer remain enabled. Release packages cannot overwrite the
 root updater, service unit, Compose policy or mutable data.
+When `host_deploy.py` changes, install the reviewed updater separately before
+promotion; replacing the server image does not update the host script. Health
+checks use the native default username when it is omitted from `.env`, while
+preserving explicitly configured usernames. Credential values are not printed.
 Before changing the existing stack's repository trust, retire any legacy updater
 entry points referenced by retained SSM document versions. Historical versions
 must not provide a path back to the old product or repository.
@@ -73,6 +77,31 @@ Browser login remains an explicit native account operation. Startup and model
 generation use SpiderMonkey; deployment does not open a browser or import an
 account automatically. Account discovery and imports may check Google when the
 owner invokes them, as upstream does.
+
+The generation runtime is browserless for both PG and `-build`: SpiderMonkey
+executes the authentication scripts inside the service, and Go sends the requests.
+The image also includes Xvfb and the shared libraries needed for explicit native
+browser login. These are dormant until the owner invokes that login operation;
+they do not turn model generation into browser automation. Image builds verify
+the libraries and start/stop an isolated virtual display without contacting Google.
+
+Worker settings use the native configuration chain. The server defaults and
+`server.env.example` recommend:
+
+```dotenv
+WARM_WORKER_LIMIT=1
+MAX_ACTIVE_WORKERS=4
+WARM_STARTUP_CONCURRENCY=4
+```
+
+These are configurable defaults, not fixed product limits. Existing explicit
+values are preserved; set the values above in the persistent `.env` or management
+settings to apply the recommendation to an existing installation. Process
+environment variables override `.env` and lock the corresponding management field.
+Startup concurrency must be between 1 and the active worker limit, and the active
+limit must not be smaller than the warm target. The actual limiter respects the
+configured startup concurrency for both SpiderMonkey and Camoufox. Raising the
+startup limit alone does not prewarm more accounts.
 
 ## Data inventory and consistent recovery
 
@@ -113,7 +142,9 @@ restoration is a separate recovery operation for corruption/incompatibility.
 Before changing the HTTPS gateway or removing any legacy repository:
 
 - Verify candidate health, independent auth, bounded metadata and no browser
-  processes/preview listener; import, restart, upgrade and rollback preserve data.
+  processes during startup/generation or preview listener; import, restart,
+  upgrade and rollback preserve data. Verify explicit native browser login
+  separately from browserless generation.
 - Connect a separate SillyTavern profile using Chat Completion / Custom OpenAI,
   base URL ending in `/v1`, a current model key and Function Calling enabled.
 - Check PG and `-build`: system/history/continuation, ordinary incremental text

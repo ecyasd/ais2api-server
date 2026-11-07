@@ -5,6 +5,38 @@ import (
 	"fmt"
 )
 
+// validateServerChatTools rejects custom tools before the first generation;
+// their history cannot be returned through the server's function-only contract.
+func validateServerChatTools(request chatRequest) error {
+	unsupported := fmt.Errorf("服务器版不支持 custom 工具，请使用标准 function 工具")
+	for _, tool := range request.Tools {
+		if tool.Type == "custom" {
+			return unsupported
+		}
+	}
+	var choice struct {
+		Type         string          `json:"type"`
+		Tools        []toolReference `json:"tools"`
+		AllowedTools *struct {
+			Tools []toolReference `json:"tools"`
+		} `json:"allowed_tools"`
+	}
+	if json.Unmarshal(request.ToolChoice, &choice) == nil {
+		if choice.Type == "custom" {
+			return unsupported
+		}
+		if choice.AllowedTools != nil {
+			choice.Tools = append(choice.Tools, choice.AllowedTools.Tools...)
+		}
+		for _, tool := range choice.Tools {
+			if tool.Type == "custom" {
+				return unsupported
+			}
+		}
+	}
+	return nil
+}
+
 // validateChatToolHistory rejects broken associations before the upstream
 // converter's legacy name-recovery heuristics can guess a different tool.
 func validateChatToolHistory(messages []chatMessage) error {
