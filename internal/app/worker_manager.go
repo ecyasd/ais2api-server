@@ -30,6 +30,7 @@ type accountWorkerManager struct {
 	camoufox       string
 	globalProxy    string
 	initTimeout    time.Duration
+	idleAfter      time.Duration
 	warmTarget     atomic.Int64
 	maxActive      atomic.Int64
 	startup        startupLimiter
@@ -177,7 +178,7 @@ func newAccountWorkerManager(
 	lifecycle, cancel := context.WithCancel(context.Background())
 	manager := &accountWorkerManager{
 		pool: pool, accounts: make(map[string]*accountWorker, len(accounts)), requests: requests, camoufox: camoufoxPath,
-		globalProxy: globalProxy, initTimeout: initTimeout,
+		globalProxy: globalProxy, initTimeout: initTimeout, idleAfter: configuredWorkerIdleTimeout(),
 		openings:  make(map[string]chan struct{}),
 		lifecycle: lifecycle, cancel: cancel, signal: make(chan struct{}), dispatch: newDispatchQueue(),
 		victims: make(map[string]struct{}), pageHeaders: make(map[string]http.Header),
@@ -197,7 +198,7 @@ func (manager *accountWorkerManager) SetCapacity(warmTarget int, maxActive int, 
 	manager.setLimits(warmTarget, maxActive, startupConcurrency)
 	manager.dispatch.wakeHeads()
 	go func() {
-		for manager.reapIdleWorker(time.Now().Add(-workerIdleTimeout)) {
+		for manager.reapIdleWorker(time.Now().Add(-manager.idleTimeout())) {
 		}
 	}()
 }
@@ -316,18 +317,18 @@ func (manager *accountWorkerManager) runtimeAvailable(accountIDs []string) ([]st
 }
 
 // workerIdleTimeout 为超出热池目标的 Worker 空闲多久后关闭
-const workerIdleTimeout = 5 * time.Minute
+const workerIdleTimeout = 30 * time.Minute
 
 // reapIdleWorkers 定期关闭超出热池目标且空闲超时的 Worker
 func (manager *accountWorkerManager) reapIdleWorkers() {
-	ticker := time.NewTicker(workerIdleTimeout / 10)
+	ticker := time.NewTicker(workerIdleCheckInterval(manager.idleTimeout()))
 	defer ticker.Stop()
 	for {
 		select {
 		case <-manager.lifecycle.Done():
 			return
 		case <-ticker.C:
-			for manager.reapIdleWorker(time.Now().Add(-workerIdleTimeout)) {
+			for manager.reapIdleWorker(time.Now().Add(-manager.idleTimeout())) {
 			}
 		}
 	}

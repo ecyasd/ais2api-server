@@ -6,6 +6,7 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
+      WORKER_IDLE_TIMEOUT: "${WORKER_IDLE_TIMEOUT:-30m}"
       LISTEN_ADDR: "127.0.0.1:${SERVER_PORT:-2049}"
     volumes:
       - "${SERVER_DATA:?Set a dedicated persistent directory}:/data"
