@@ -162,3 +162,8 @@ Before changing the HTTPS gateway or removing any legacy repository:
 Existing native usage history stays intact. New diagnostics retain at most 10,000
 requests for 7 days; live logs and write queues are bounded. Diagnostics never
 persist prompt/body/thought/signature/Cookie values.
+
+Failed requests include `timing.failure` in correlated logs and stored timings:
+a fixed error category/reason, an allowlisted upstream operation, HTTP status and
+RPC code. Raw error messages and upstream metadata remain excluded. Older
+`upstream_failure` records cannot recover details already discarded.
