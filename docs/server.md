@@ -22,18 +22,35 @@ test suite does not imply live Google or SillyTavern acceptance.
 
 The shared policy is `internal/product/server.json`. It controls management
 navigation, public model APIs, prompt/state databases, preview listeners,
-runtime engine and the 1 warm / 2 active / 1 startup worker baseline. Configuration
-reloads and imported legacy configuration pass through the same policy.
+runtime engine. Worker resources are ordinary runtime configuration, with defaults
+of 1 warm worker, 4 active workers and 4 concurrent initializations. Process
+environment variables override `.env`, and explicit saved values are preserved
+across reloads and upgrades. The defaults are not product limits: valid values
+such as 2 or 6 remain configurable. Four startup slots allow concurrent on-demand
+initialization; the default warm target is still one account. Disabling the
+preview listener also disables its port-conflict rule.
 
 Account import follows the pinned upstream implementation unchanged. The server
 profile does not rewrite Cookie input, replace account-add actions with pairing,
 change native import defaults or hide native browser-discovery routes.
+
+Both PG and the `-build` code assistant use the upstream SpiderMonkey runtime for
+WAA scripts and the Go HTTP transport for generation. SpiderMonkey is an embedded
+JavaScript engine, not a running Firefox/Camoufox browser. This browserless path
+is inherited from AIS2 and enforced by the server profile. Explicit account login
+is separate: the image includes the Linux libraries and virtual display needed
+by the native, on-demand Camoufox login. Installing those dependencies does not
+start a browser during service startup or generation.
 
 OpenAI Chat Completions is the primary contract. Gemini generation, streaming,
 model listing and counting remain available. Ordinary models use PG; `-build`
 selects the independent code assistant. Tools are a first-version requirement:
 declaration membership, mode, single-call requests, complete JSON, strict schema,
 call/result IDs and thought signatures are checked in offline contracts.
+OpenAI custom tools are rejected at request entry; the server's multi-turn tool
+contract uses standard `function` tools. Completed Build tool handoffs terminate
+the client turn without waiting for the upstream response to close, and cached
+history must preserve each tool result's association with its call.
 
 For a fixed thinking level in SillyTavern's Custom OpenAI connection, use its
 additional request body, for example `reasoning_effort: low`. This also makes

@@ -240,6 +240,10 @@ func (s *server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.config.Product != nil {
+		if err := validateServerChatTools(request); err != nil {
+			writeOpenAIError(w, http.StatusBadRequest, "unsupported_tool_type", err.Error())
+			return
+		}
 		if err := validateChatToolHistory(request.Messages); err != nil {
 			writeOpenAIError(w, http.StatusBadRequest, "invalid_tool_history", err.Error())
 			return

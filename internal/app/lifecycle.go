@@ -179,7 +179,7 @@ func (manager *runtimeManager) startService(ctx context.Context) (api.AdminStatu
 	manager.launching = make(chan struct{})
 	manager.mu.Unlock()
 
-	cfg, err := config.Load(manager.configPath)
+	cfg, err := product.LoadConfig(manager.configPath)
 	if err != nil {
 		manager.finishStart(launchCancel)
 		return api.AdminStatus{}, err

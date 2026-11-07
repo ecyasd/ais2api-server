@@ -192,7 +192,7 @@ func newAccountWorkerManager(
 	return manager
 }
 
-// SetCapacity 设置常驻 Worker 数、峰值 Worker 上限与 Camoufox 启动并发，随后关闭超出峰值上限的空闲 Worker
+// SetCapacity 设置常驻 Worker 数、峰值 Worker 上限与启动并发，随后关闭超出峰值上限的空闲 Worker
 func (manager *accountWorkerManager) SetCapacity(warmTarget int, maxActive int, startupConcurrency int) {
 	manager.setLimits(warmTarget, maxActive, startupConcurrency)
 	manager.dispatch.wakeHeads()
@@ -202,11 +202,8 @@ func (manager *accountWorkerManager) SetCapacity(warmTarget int, maxActive int, 
 	}()
 }
 
-// setLimits 保存 Worker 数量上限，纯 Go 后端同时启动的 Worker 数只受峰值上限约束
+// setLimits 保存 Worker 数量上限；两个 WAA 后端都遵守配置的启动并发。
 func (manager *accountWorkerManager) setLimits(warmTarget int, maxActive int, startupConcurrency int) {
-	if manager.camoufox == "" {
-		startupConcurrency = maxActive
-	}
 	manager.warmTarget.Store(int64(warmTarget))
 	manager.maxActive.Store(int64(maxActive))
 	manager.startup.setLimit(max(startupConcurrency, 1))

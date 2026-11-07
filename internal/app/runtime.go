@@ -2191,6 +2191,9 @@ func (service *trackedService) settleAttempt(
 	retry *generateRetry,
 	mayRecover bool,
 ) attemptOutcome {
+	// 首事件之后收齐非流式响应仍可能失败；所有失败结算都结束计时。
+	// timingEnd 自身只执行一次，兼容 runAttempt 已记录的首事件前失败。
+	defer attempt.timingEnd(false)
 	err := attempt.err
 	lease := attempt.lease
 	accountID, accountLabel := lease.Account().ID, attempt.accountLabel

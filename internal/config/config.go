@@ -20,11 +20,11 @@ const (
 	defaultPreviewListenAddr  = "127.0.0.1:2050"
 	defaultInitTimeout        = 2 * time.Minute
 	defaultRequestTimeout     = 30 * time.Minute
-	defaultWarmWorkerLimit    = 10
-	defaultMaxActiveWorkers   = 20
+	defaultWarmWorkerLimit    = 1
+	defaultMaxActiveWorkers   = 4
 	camoufoxWarmWorkerLimit   = 5
 	camoufoxMaxActiveWorkers  = 10
-	defaultWarmConcurrency    = 5
+	defaultWarmConcurrency    = 4
 	defaultAccountConcurrency = 2
 )
 
@@ -124,6 +124,9 @@ type Config struct {
 	AuthStates             string
 	ListenAddr             string
 	PreviewListenAddr      string
+	// PreviewDisabled is non-persistent distribution policy; ordinary upstream
+	// loads keep preview validation enabled.
+	PreviewDisabled        bool
 	ProxyAPIKey            string
 	APIKeyAccounts         string
 	Proxy                  string
@@ -149,7 +152,7 @@ type Config struct {
 // workerDefaultKeys 是默认值随 WAA 后端变化的键
 var workerDefaultKeys = []string{"WARM_WORKER_LIMIT", "MAX_ACTIVE_WORKERS"}
 
-// defaultsFor 返回 WAA 后端为 backend 时的默认配置，Camoufox 后端的常驻预热账户数与活动 Worker 上限较小
+// defaultsFor 返回 WAA 后端为 backend 时的默认配置，Camoufox 后端保留自己的常驻预热账户数与活动 Worker 默认值
 func defaultsFor(backend string) Config {
 	cfg := Default()
 	if backend == WAABackendCamoufox {
@@ -317,9 +320,14 @@ var configChecks = []configCheck{
 		return nil
 	}},
 	{[]string{"LISTEN_ADDR"}, func(c Config) error { return validateListenAddr("LISTEN_ADDR", c.ListenAddr) }},
-	{[]string{"PREVIEW_LISTEN_ADDR"}, func(c Config) error { return validateListenAddr("PREVIEW_LISTEN_ADDR", c.PreviewListenAddr) }},
+	{[]string{"PREVIEW_LISTEN_ADDR"}, func(c Config) error {
+		if c.PreviewDisabled {
+			return nil
+		}
+		return validateListenAddr("PREVIEW_LISTEN_ADDR", c.PreviewListenAddr)
+	}},
 	{[]string{"LISTEN_ADDR", "PREVIEW_LISTEN_ADDR"}, func(c Config) error {
-		if listenPort(c.ListenAddr) == listenPort(c.PreviewListenAddr) {
+		if !c.PreviewDisabled && listenPort(c.ListenAddr) == listenPort(c.PreviewListenAddr) {
 			return fmt.Errorf("PREVIEW_LISTEN_ADDR 的端口不能与 LISTEN_ADDR 相同")
 		}
 		return nil
@@ -418,8 +426,23 @@ var configChecks = []configCheck{
 	}},
 }
 
-// Load 从指定 env 文件和进程环境加载配置，取值无效的项改用默认值并记入 Invalid，两者都没有 WAA 后端时按账户状态目录确定后端并追加到文件
+// LoadOptions contains non-persistent distribution assembly policy. The zero
+// value preserves ordinary loading and backend detection.
+type LoadOptions struct {
+	DisablePreview  bool
+	ForceWAABackend string
+}
+
+// Load 从指定 env 文件和进程环境加载配置，保留上游的预览监听校验。
 func Load(path string) (Config, error) {
+	return LoadWithOptions(path, LoadOptions{})
+}
+
+// LoadWithOptions 从 env 文件和进程环境加载配置；装配选项在取值校验和默认值回退前生效。
+func LoadWithOptions(path string, options LoadOptions) (Config, error) {
+	if options.ForceWAABackend != "" && options.ForceWAABackend != WAABackendCamoufox && options.ForceWAABackend != WAABackendSpiderMonkey {
+		return Config{}, fmt.Errorf("WAA_BACKEND 装配选项必须是 camoufox 或 spidermonkey")
+	}
 	values, commented, err := readEnvFile(path)
 	if err != nil {
 		return Config{}, err
@@ -430,6 +453,7 @@ func Load(path string) (Config, error) {
 		}
 	}
 	cfg := Default()
+	cfg.PreviewDisabled = options.DisablePreview
 	for _, key := range configKeys {
 		if value, ok := os.LookupEnv(key); ok {
 			values[key] = value
@@ -443,8 +467,11 @@ func Load(path string) (Config, error) {
 			}
 		}
 	}
+	if options.ForceWAABackend != "" {
+		cfg.WAABackend = options.ForceWAABackend
+	}
 	if _, ok := values["WAA_BACKEND"]; !ok {
-		if camoufoxOnlyAccounts(cfg.AuthStates) {
+		if options.ForceWAABackend == "" && camoufoxOnlyAccounts(cfg.AuthStates) {
 			cfg.WAABackend = WAABackendCamoufox
 		}
 		if err := appendEnv(path, "WAA_BACKEND", cfg.WAABackend); err != nil {

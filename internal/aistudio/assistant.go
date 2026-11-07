@@ -702,6 +702,8 @@ type AssistantStreamDecoder struct {
 	finished  bool
 	// answered 表示最近解码的步骤是已完成、含正文且没有工具动作的模型步骤，即本轮回复结束
 	answered bool
+	// handedOff 表示已完成的 ask_question 已把本轮交回客户端，无须继续等待任务流尾
+	handedOff bool
 	// overran 表示函数调用之后模型继续输出正文，本轮回复在调用处结束
 	overran bool
 }
@@ -748,7 +750,7 @@ func decodeAssistantMessages(source io.Reader, decoder *AssistantStreamDecoder, 
 	if token, err := stream.Token(); err != nil || token != json.Delim('[') {
 		return fail("$[0]", "消息列表不是数组")
 	}
-	for ; !decoder.answered && !decoder.overran && stream.More(); index++ {
+	for ; !decoder.answered && !decoder.handedOff && !decoder.overran && stream.More(); index++ {
 		var raw json.RawMessage
 		if err := stream.Decode(&raw); err != nil {
 			return fail(fmt.Sprintf("$[0][%d]", index), err.Error())
@@ -763,7 +765,7 @@ func decodeAssistantMessages(source io.Reader, decoder *AssistantStreamDecoder, 
 			}
 		}
 	}
-	if !decoder.answered && !decoder.overran {
+	if !decoder.answered && !decoder.handedOff && !decoder.overran {
 		if token, err := stream.Token(); err != nil || token != json.Delim(']') {
 			return fail("$[0]", "消息列表没有正常结束")
 		}
@@ -1103,7 +1105,7 @@ func (d *AssistantStreamDecoder) decodeQuestion(raw json.RawMessage, path string
 		return nil, withMethod(err, assistantStreamMethod)
 	}
 	toolRaw := rawAt(action, 21)
-	if isJSONNull(toolRaw) || d.called {
+	if isJSONNull(toolRaw) {
 		return nil, nil
 	}
 	tool, err := rawArray(toolRaw, path+"[21]", evidence)
@@ -1138,6 +1140,13 @@ func (d *AssistantStreamDecoder) decodeQuestion(raw json.RawMessage, path string
 	}
 	if err := json.Unmarshal([]byte(arguments["questions"]), &questions); err != nil {
 		return nil, &ProtocolEvidenceError{Method: assistantStreamMethod, Path: path + "[21][3]", Detail: "ask_question 的 questions 不是问题列表: " + err.Error(), Raw: cloneRaw(evidence)}
+	}
+	// decodeQuestion is only called for a completed action. Preserve its terminal
+	// state even when the function call was emitted in an earlier snapshot or a
+	// later step in this message resets answered.
+	d.handedOff, d.finished = true, true
+	if d.called {
+		return nil, nil
 	}
 	var text strings.Builder
 	for _, question := range questions {

@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "vp dev",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "build": "vue-tsc --noEmit && vp build",
     "typecheck": "vue-tsc --noEmit",
     "lint": "vp lint . --max-warnings=0 && eslint . --max-warnings=0",

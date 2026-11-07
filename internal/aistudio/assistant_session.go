@@ -58,9 +58,10 @@ func newAssistantSessions() *assistantSessions {
 	return &assistantSessions{tips: make(map[assistantSessionKey]*assistantSession), applets: make(map[string]*assistantSession)}
 }
 
-// assistantLinks 把对话按连续的模型轮与其余轮次分组，返回每组结束处的累积摘要
+// assistantLinks 把对话按连续的模型轮与其余轮次分组，返回每组结束处的累积摘要；函数结果按前一模型轮中的调用序号关联，允许客户端一致重命名调用 ID。
 func assistantLinks(contents []Content) []assistantLink {
 	var links []assistantLink
+	var calls []FunctionCall
 	digest := ""
 	for start := 0; start < len(contents); {
 		model := contents[start].Role == RoleAssistant
@@ -69,24 +70,57 @@ func assistantLinks(contents []Content) []assistantLink {
 		for ; end < len(contents) && (contents[end].Role == RoleAssistant) == model; end++ {
 			parts = append(parts, contents[end].Parts...)
 		}
-		digest = assistantLinkDigest(digest, model, parts)
+		digest = assistantLinkDigestWithCalls(digest, model, parts, calls)
 		links = append(links, assistantLink{end: end, model: model, digest: digest})
+		if model {
+			calls = nil
+			for _, part := range parts {
+				if !part.Thought && part.FunctionCall != nil {
+					calls = append(calls, *part.FunctionCall)
+				}
+			}
+		}
 		start = end
 	}
 	return links
 }
 
-// assistantLinkDigest 返回在 previous 之后接上一组轮次的摘要：正文 Part 直接连接后去掉首尾空白，函数调用计入名称与规范参数，函数结果计入规范内容，其余 Part 去掉签名、内联数据以其 SHA-256 计入；思考与调用 ID 不计入，客户端回传的模型轮与服务输出的同一回复得到同一摘要
+// assistantLinkDigest 返回在 previous 之后追加模型回复的摘要，函数调用计入名称与规范参数，忽略客户端可重命名的调用 ID。
 func assistantLinkDigest(previous string, model bool, parts []Part) string {
+	return assistantLinkDigestWithCalls(previous, model, parts, nil)
+}
+
+// assistantLinkDigestWithCalls 将结果绑定到前一模型轮中的调用序号；previous 已包含该轮的函数名和参数，因此改变结果关联会改变摘要，一致重命名 ID 则不改变。
+func assistantLinkDigestWithCalls(previous string, model bool, parts []Part, calls []FunctionCall) string {
 	var text []string
 	items := []any{}
+	used := make([]bool, len(calls))
 	for _, part := range parts {
 		switch {
 		case part.Thought:
 		case part.FunctionCall != nil:
 			items = append(items, []any{part.FunctionCall.Name, canonicalJSON(part.FunctionCall.Arguments)})
 		case part.FunctionResult != nil:
-			items = append(items, []any{canonicalJSON(part.FunctionResult.Content)})
+			result := part.FunctionResult
+			matched := -1
+			for index, call := range calls {
+				if used[index] || result.ID != "" && result.ID != call.ID || result.Name != "" && result.Name != call.Name {
+					continue
+				}
+				if matched >= 0 {
+					matched = -1
+					break
+				}
+				matched = index
+			}
+			if matched >= 0 {
+				used[matched] = true
+				items = append(items, []any{"function_result", matched, canonicalJSON(result.Content), result.WillContinue})
+			} else {
+				// Invalid or ambiguous associations must not collide with a bound
+				// result before the request encoder reports their validation error.
+				items = append(items, []any{"unmatched_function_result", result.ID, result.Name, canonicalJSON(result.Content), result.WillContinue})
+			}
 		case part.Text != "":
 			text = append(text, part.Text)
 		case !part.payload():

@@ -63,7 +63,12 @@ func Run(args []string) int {
 
 // runCommand 分派首次配置与默认服务，返回值 restart 表示在线更新后需要重新启动
 func runCommand(args []string, logs *logOutput, executable string) (restart bool, err error) {
-	cfg, err := config.Load(".env")
+	loadConfig := product.LoadConfig
+	if len(args) != 0 && args[0] == "setup" {
+		// Account setup keeps the native upstream configuration contract.
+		loadConfig = config.Load
+	}
+	cfg, err := loadConfig(".env")
 	if err != nil {
 		return false, err
 	}

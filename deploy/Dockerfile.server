@@ -1,6 +1,14 @@
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates tzdata \
+    libgtk-3-0 libasound2 libnss3 libdbus-glib-1-2 libxtst6 libxrandr2 libgbm1 libxkbcommon0 \
+    libpango-1.0-0 libcairo2 libxcomposite1 libxdamage1 libxfixes3 libx11-xcb1 \
+    xvfb \
     && rm -rf /var/lib/apt/lists/*
+# Native browser login is explicit; generation still uses SpiderMonkey. Check
+# the login runtime offline without downloading a browser or using credentials.
+COPY deploy/check-login-deps.sh /usr/local/libexec/ais2api-server/check-login-deps.sh
+RUN sh /usr/local/libexec/ais2api-server/check-login-deps.sh
 COPY dist/aistudio2api /usr/local/bin/aistudio2api
 WORKDIR /data
 ENV LISTEN_ADDR=0.0.0.0:2048

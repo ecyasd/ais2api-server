@@ -217,7 +217,8 @@ export const messages: Record<TranslationKey, string> = {
   'logs.reply': 'Reply',
   'logs.outputTotal': 'Output total',
   'logs.averageSpeed': 'Average speed',
-  'logs.firstToken': 'First token',
+  'logs.firstEvent': 'First event',
+  'logs.firstBody': 'First response text',
   'logs.details': 'Details',
   'logs.endpoint': 'Endpoint',
   'logs.inputTokens': 'Input tokens',
@@ -289,7 +290,7 @@ export const messages: Record<TranslationKey, string> = {
   'settings.requestTimeout': 'Request timeout',
   'settings.warmWorkerLimit': 'Warm workers',
   'settings.maxActiveWorkers': 'Peak worker limit',
-  'settings.warmStartupConcurrency': 'Camoufox startup concurrency',
+  'settings.warmStartupConcurrency': 'Worker startup concurrency',
   'settings.perAccountConcurrency': 'Concurrent requests per account',
   'settings.routingStrategy': 'Account selection strategy',
   'settings.routingRoundRobin': 'Round robin',
@@ -1574,7 +1575,8 @@ export const messages: Record<TranslationKey, string> = {
   'settings.authPathHelp': 'Account file, directory or several comma-separated paths.',
   'settings.warmWorkerLimitHelp': 'Accounts kept warm after the generation service starts.',
   'settings.maxActiveWorkersHelp': 'Maximum workers running at peak',
-  'settings.warmStartupConcurrencyHelp': 'Camoufox workers cold-starting at once',
+  'settings.warmStartupConcurrencyHelp':
+    'Workers cold-starting at once, for SpiderMonkey and Camoufox',
   'settings.perAccountConcurrencyHelp': 'Requests one account runs at the same time.',
   'settings.buildNativeHelp':
     'Non-streaming requests prefer Build and use Playground when it is unavailable',
